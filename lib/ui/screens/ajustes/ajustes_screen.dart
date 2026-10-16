@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +24,8 @@ class AjustesScreen extends StatefulWidget {
   State<AjustesScreen> createState() => _AjustesScreenState();
 }
 
-class _AjustesScreenState extends State<AjustesScreen> {
+class _AjustesScreenState extends State<AjustesScreen>
+    with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final _negocio = TextEditingController(text: 'GotaControl');
   final _telefono = TextEditingController();
@@ -39,15 +42,35 @@ class _AjustesScreenState extends State<AjustesScreen> {
   BackupFrequency _frecuenciaRespaldo = BackupFrequency.daily;
   LocalBackupStatus? _estadoRespaldo;
   String? _errorRespaldo;
+  bool? _notificacionesHabilitadas;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_consultarPermisoNotificaciones());
+      });
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _negocio.dispose();
     _telefono.dispose();
     _direccion.dispose();
     _porcentajeMora.dispose();
     _diasGracia.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_consultarPermisoNotificaciones());
+    }
   }
 
   @override
@@ -253,6 +276,47 @@ class _AjustesScreenState extends State<AjustesScreen> {
                 titulo: 'Notificaciones',
                 icono: Icons.notifications_none,
                 children: [
+                  if (defaultTargetPlatform == TargetPlatform.android) ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Permiso de Android'),
+                      subtitle: Text(
+                        _notificacionesHabilitadas == null
+                            ? 'Comprobando permiso...'
+                            : _notificacionesHabilitadas!
+                            ? 'Las notificaciones están permitidas.'
+                            : 'Android está bloqueando las notificaciones.',
+                      ),
+                      trailing: Icon(
+                        _notificacionesHabilitadas == true
+                            ? Icons.notifications_active_outlined
+                            : Icons.notifications_off_outlined,
+                        color: _notificacionesHabilitadas == true
+                            ? AppColors.primary
+                            : AppColors.warning,
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _notificacionesHabilitadas == true
+                            ? null
+                            : _notificacionesHabilitadas == false
+                            ? _abrirAjustesNotificaciones
+                            : _solicitarPermisoNotificaciones,
+                        icon: Icon(
+                          _notificacionesHabilitadas == false
+                              ? Icons.settings_outlined
+                              : Icons.notifications_active_outlined,
+                        ),
+                        label: Text(
+                          _notificacionesHabilitadas == false
+                              ? 'Abrir ajustes del teléfono'
+                              : 'Permitir notificaciones',
+                        ),
+                      ),
+                    ),
+                  ],
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Resumen diario'),
@@ -303,6 +367,49 @@ class _AjustesScreenState extends State<AjustesScreen> {
   void _mensaje(String texto) => ScaffoldMessenger.of(
     context,
   ).showSnackBar(SnackBar(content: Text(texto)));
+
+  Future<void> _consultarPermisoNotificaciones() async {
+    try {
+      final habilitadas = await NotificacionService.instance
+          .notificacionesHabilitadas();
+      if (mounted) setState(() => _notificacionesHabilitadas = habilitadas);
+    } on Object catch (error) {
+      if (mounted) {
+        _mensaje('No se pudo consultar el permiso de notificaciones: $error');
+      }
+    }
+  }
+
+  Future<void> _solicitarPermisoNotificaciones() async {
+    try {
+      final provider = context.read<GotaProvider>();
+      final habilitadas = await NotificacionService.instance
+          .solicitarPermisoNotificaciones();
+      if (mounted) setState(() => _notificacionesHabilitadas = habilitadas);
+      if (habilitadas) {
+        await NotificacionService.instance.sincronizarConDatos(provider);
+        if (mounted) _mensaje('Notificaciones permitidas.');
+      } else if (mounted) {
+        _mensaje(
+          'Android no concedió el permiso. Revisa los ajustes del teléfono.',
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) _mensaje('No se pudo solicitar el permiso: $error');
+    }
+  }
+
+  Future<void> _abrirAjustesNotificaciones() async {
+    try {
+      final abierto = await NotificacionService.instance
+          .abrirAjustesNotificaciones();
+      if (!abierto && mounted) {
+        _mensaje('No se pudieron abrir los ajustes de notificaciones.');
+      }
+    } on Object catch (error) {
+      if (mounted) _mensaje('No se pudieron abrir los ajustes: $error');
+    }
+  }
 
   List<Widget> _contenidoRespaldo(GotaProvider provider) => [
     Text(
@@ -685,15 +792,36 @@ class _AjustesScreenState extends State<AjustesScreen> {
 
   Future<void> _programarRecordatorio(bool habilitado) async {
     final servicio = NotificacionService.instance;
-    if (!habilitado) {
-      await servicio.cancelarNotificacion(1);
-      return;
+    try {
+      if (!habilitado) {
+        await servicio.cancelarNotificacion(1);
+        return;
+      }
+      if (!await servicio.notificacionesHabilitadas()) {
+        final permitido = await servicio.solicitarPermisoNotificaciones();
+        if (!permitido) {
+          if (mounted) {
+            setState(() => _notificacionesHabilitadas = false);
+            _mensaje(
+              'Para recibir recordatorios, concede el permiso en los ajustes '
+              'del teléfono.',
+            );
+          }
+          return;
+        }
+        if (mounted) setState(() => _notificacionesHabilitadas = true);
+      }
+      await servicio.programarNotificacionDiaria(
+        hora: _horaRecordatorio,
+        mensaje:
+            'Revisa el recaudo, la ganancia y las cuotas pendientes de hoy.',
+      );
+      if (mounted) _mensaje('Recordatorio diario programado.');
+    } on Object catch (error) {
+      if (mounted) {
+        _mensaje('No se pudieron actualizar los recordatorios: $error');
+      }
     }
-    await servicio.programarNotificacionDiaria(
-      hora: _horaRecordatorio,
-      mensaje: 'Revisa el recaudo, la ganancia y las cuotas pendientes de hoy.',
-    );
-    if (mounted) _mensaje('Recordatorio diario programado.');
   }
 
   Future<void> _cambiarPin(bool valor, GotaProvider provider) async {
@@ -830,7 +958,17 @@ class _AjustesScreenState extends State<AjustesScreen> {
             '${_horaRecordatorio.hour.toString().padLeft(2, '0')}:'
             '${_horaRecordatorio.minute.toString().padLeft(2, '0')}',
       });
-      if (mounted) _mensaje('Ajustes guardados en este dispositivo.');
+      try {
+        await NotificacionService.instance.sincronizarConDatos(provider);
+        if (mounted) _mensaje('Ajustes guardados en este dispositivo.');
+      } on Object catch (error) {
+        if (mounted) {
+          _mensaje(
+            'Ajustes guardados, pero no se actualizaron los recordatorios: '
+            '$error',
+          );
+        }
+      }
     } on Object catch (error) {
       if (mounted) _mensaje('No se pudieron guardar los ajustes: $error');
     } finally {

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/date_utils.dart';
+import '../../../data/models/cliente.dart';
 import '../../../data/models/cuota.dart';
 import '../../../data/models/prestamo.dart';
 import '../../../logic/providers/gota_provider.dart';
@@ -35,6 +36,12 @@ class DashboardScreen extends StatelessWidget {
     }
     final ancho = MediaQuery.sizeOf(context).width;
     final dosColumnas = ancho > 650;
+    final cantidadAlertas =
+        demo.cuotasDeHoy.length +
+        demo.moras.fold<int>(
+          0,
+          (total, mora) => total + mora.cuotasAtrasadas.length,
+        );
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -62,10 +69,10 @@ class DashboardScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'Notificaciones',
-            onPressed: () => _mostrarNotificaciones(context, demo.moras.length),
+            onPressed: () => _mostrarNotificaciones(context, demo),
             icon: Badge(
-              isLabelVisible: demo.moras.isNotEmpty,
-              label: Text('${demo.moras.length}'),
+              isLabelVisible: cantidadAlertas > 0,
+              label: Text('$cantidadAlertas'),
               child: const Icon(Icons.notifications_outlined),
             ),
           ),
@@ -194,23 +201,113 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  static void _mostrarNotificaciones(BuildContext context, int cantidad) {
+  static void _mostrarNotificaciones(
+    BuildContext context,
+    GotaProvider provider,
+  ) {
+    final cuotasVencidas =
+        <({Prestamo prestamo, Cliente cliente, Cuota cuota})>[];
+    for (final mora in provider.moras) {
+      for (final cuota in mora.cuotasAtrasadas) {
+        cuotasVencidas.add((
+          prestamo: mora.prestamo,
+          cliente: mora.cliente,
+          cuota: cuota,
+        ));
+      }
+    }
+    final cuotasDeHoy = <({Prestamo prestamo, Cliente cliente, Cuota cuota})>[];
+    for (final cuota in provider.cuotasDeHoy) {
+      final prestamo = provider.prestamoPorId(cuota.prestamoId);
+      final cliente = prestamo == null
+          ? null
+          : provider.clientePorId(prestamo.clienteId);
+      if (prestamo != null && cliente != null) {
+        cuotasDeHoy.add((prestamo: prestamo, cliente: cliente, cuota: cuota));
+      }
+    }
+
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Alertas', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            Text(
-              cantidad == 0
-                  ? 'No tienes alertas pendientes.'
-                  : 'Hay $cantidad préstamos con cuotas atrasadas.',
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78,
             ),
-          ],
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Text(
+                  'Alertas',
+                  style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  cuotasVencidas.isEmpty && cuotasDeHoy.isEmpty
+                      ? 'No tienes alertas pendientes.'
+                      : '${cuotasVencidas.length} '
+                            '${cuotasVencidas.length == 1 ? 'cuota vencida' : 'cuotas vencidas'} · '
+                            '${cuotasDeHoy.length} '
+                            '${cuotasDeHoy.length == 1 ? 'cuota para hoy' : 'cuotas para hoy'}',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                if (cuotasVencidas.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    'Cuotas vencidas',
+                    style: Theme.of(sheetContext).textTheme.titleMedium,
+                  ),
+                  ...cuotasVencidas.map(
+                    (alerta) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppColors.warning,
+                      ),
+                      title: Text(alerta.cliente.nombre),
+                      subtitle: Text(
+                        'Cuota ${alerta.cuota.numeroCuota} · venció '
+                        '${GotaDateUtils.formatearFecha(alerta.cuota.fechaVencimiento)} · '
+                        '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
+                      ),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        _abrirDetalle(context, alerta.prestamo);
+                      },
+                    ),
+                  ),
+                ],
+                if (cuotasDeHoy.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Cuotas para hoy',
+                    style: Theme.of(sheetContext).textTheme.titleMedium,
+                  ),
+                  ...cuotasDeHoy.map(
+                    (alerta) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.event_available_outlined,
+                        color: AppColors.blue,
+                      ),
+                      title: Text(alerta.cliente.nombre),
+                      subtitle: Text(
+                        'Cuota ${alerta.cuota.numeroCuota} · '
+                        '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
+                      ),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        _abrirDetalle(context, alerta.prestamo);
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

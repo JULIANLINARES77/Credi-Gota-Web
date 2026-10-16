@@ -54,6 +54,23 @@ Los límites de Ajustes se validan en la interfaz y en el proveedor local: nombr
 de negocio obligatorio (250 caracteres), teléfono opcional (15), dirección
 opcional (250), mora entre 0 y 100 % y días de gracia entre 0 y 365.
 
+## Notificaciones locales
+
+GotaControl programa recordatorios locales para las cuotas pendientes: el día
+del vencimiento y, si está activada la opción **Alertas de mora**, tres días
+después. También permite programar un resumen diario desde Ajustes. Al crear un
+préstamo, registrar un pago o iniciar la app, los recordatorios se sincronizan
+con las cuotas y el saldo que aún falta pagar. Para respetar el límite de
+alarmas de Android, se mantienen hasta 300 alertas de cuotas próximas, además
+del resumen diario; al volver a abrir la app se actualiza esa ventana.
+
+En Android 13 o posterior se debe permitir el permiso de notificaciones del
+sistema. El estado se consulta en **Ajustes → Notificaciones**; si está
+bloqueado, usa **Abrir ajustes del teléfono** y habilítalo para GotaControl.
+Las alertas dentro de la app muestran las cuotas vencidas y las que vencen hoy,
+aunque el permiso del sistema para notificaciones esté desactivado. Android y
+los modos de ahorro de batería pueden retrasar recordatorios programados.
+
 ## PIN de seguridad
 
 En Android, el PIN local se valida con bcrypt (factor de trabajo 12) mediante
@@ -63,7 +80,7 @@ base de datos puede intentar adivinar el PIN fuera de la aplicación. No almacen
 datos sincronizados ni consideres el PIN un sustituto del cifrado del dispositivo
 y de copias de seguridad protegidas.
 
-## APK Android de prueba
+## APK Android
 
 En PowerShell, si `JAVA_HOME` apunta a una carpeta inexistente, usa el JDK incluido
 con Android Studio durante la compilación:

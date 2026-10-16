@@ -91,9 +91,11 @@ void main() {
 
       if (!kIsWeb) {
         try {
-          await NotificacionService.instance.inicializarNotificaciones();
+          final notificaciones = NotificacionService.instance;
+          await notificaciones.inicializarNotificaciones();
+          await notificaciones.sincronizarConDatos(provider);
         } on Object catch (error, stackTrace) {
-          debugPrint('GotaControl: no se inicializaron notificaciones: $error');
+          debugPrint('GotaControl: no se sincronizaron notificaciones: $error');
           debugPrintStack(stackTrace: stackTrace);
         }
       }

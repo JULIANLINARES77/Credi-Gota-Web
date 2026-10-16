@@ -10,6 +10,7 @@ import '../../../core/utils/miles_input_formatter.dart';
 import '../../../data/models/prestamo.dart';
 import '../../../logic/providers/gota_provider.dart';
 import '../../../logic/services/calculadora_service.dart';
+import '../../../logic/services/notificacion_service.dart';
 import '../../widgets/resumen_card.dart';
 import 'prestamos_cliente_screen.dart';
 
@@ -419,9 +420,9 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
     if (_creandoPrestamo) return;
     if (!_formKey.currentState!.validate()) return;
     if (_clienteId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona un cliente.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Selecciona un cliente.')));
       return;
     }
     if (_frecuencia == CalculadoraService.frecuenciaPersonalizada &&
@@ -459,10 +460,24 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
       return;
     }
     if (!mounted) return;
+    String? errorNotificaciones;
+    try {
+      await NotificacionService.instance.sincronizarConDatos(demo);
+    } on Object catch (error) {
+      errorNotificaciones = error.toString();
+    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✅ Préstamo creado correctamente'),
-        duration: Duration(milliseconds: 1400),
+      SnackBar(
+        content: Text(
+          errorNotificaciones == null
+              ? '✅ Préstamo creado correctamente'
+              : 'Préstamo creado, pero no se actualizaron las notificaciones: '
+                    '$errorNotificaciones',
+        ),
+        duration: errorNotificaciones == null
+            ? const Duration(milliseconds: 1400)
+            : const Duration(seconds: 4),
       ),
     );
     await Future<void>.delayed(const Duration(milliseconds: 1400));
@@ -530,10 +545,7 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
 
       try {
         final demo = context.read<GotaProvider>();
-        await demo.agregarCliente(
-          nombre: nombre.text,
-          telefono: telefono.text,
-        );
+        await demo.agregarCliente(nombre: nombre.text, telefono: telefono.text);
         if (!mounted) return;
         final ultimo = demo.clientes.isEmpty ? null : demo.clientes.last.id;
         if (ultimo != null) {

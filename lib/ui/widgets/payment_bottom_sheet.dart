@@ -9,6 +9,7 @@ import '../../data/models/cliente.dart';
 import '../../data/models/cuota.dart';
 import '../../data/models/prestamo.dart';
 import '../../logic/providers/gota_provider.dart';
+import '../../logic/services/notificacion_service.dart';
 
 class PaymentBottomSheet extends StatefulWidget {
   const PaymentBottomSheet({
@@ -214,10 +215,26 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
             : _notaController.text.trim(),
       );
 
+      String? errorNotificaciones;
+      try {
+        await NotificacionService.instance.sincronizarConDatos(provider);
+      } on Object catch (error) {
+        errorNotificaciones = error.toString();
+      }
       if (!mounted) return;
       navigator.pop();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Pago registrado correctamente')),
+        SnackBar(
+          content: Text(
+            errorNotificaciones == null
+                ? 'Pago registrado correctamente'
+                : 'Pago registrado, pero no se actualizaron las '
+                      'notificaciones: $errorNotificaciones',
+          ),
+          duration: errorNotificaciones == null
+              ? const Duration(seconds: 2)
+              : const Duration(seconds: 4),
+        ),
       );
     } on Object catch (error) {
       if (!mounted) return;
