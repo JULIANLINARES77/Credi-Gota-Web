@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/moneda_colombiana.dart';
 import '../../core/utils/miles_input_formatter.dart';
 import '../../data/models/cliente.dart';
 import '../../data/models/cuota.dart';
@@ -204,6 +205,11 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
 
     final prestamo = widget.prestamo;
     final cuota = widget.cuota;
+    if (MonedaColombiana.esMultiploDeUnidad(cuota.montoCuota) &&
+        !MonedaColombiana.esMultiploDeUnidad(monto)) {
+      setState(() => _error = 'El pago debe ser múltiplo de \$1.000.');
+      return;
+    }
     if (prestamo.id == null || cuota.id == null) {
       setState(() => _error = 'Datos del préstamo incompletos.');
       return;

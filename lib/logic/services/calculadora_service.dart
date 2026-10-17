@@ -1,15 +1,23 @@
+import '../../core/utils/festivos_colombia.dart';
+import '../../core/utils/moneda_colombiana.dart';
+
 class ResultadoCalculoPrestamo {
   const ResultadoCalculoPrestamo({
     required this.montoInteres,
     required this.montoTotalPagar,
     required this.valorCuota,
+    required this.valoresCuota,
     required this.gananciaDiariaPromedio,
   });
 
   final double montoInteres;
   final double montoTotalPagar;
   final double valorCuota;
+  final List<double> valoresCuota;
   final double gananciaDiariaPromedio;
+
+  double get valorCuotaMaxima =>
+      valoresCuota.reduce((a, b) => a > b ? a : b);
 }
 
 class CalculadoraService {
@@ -33,6 +41,13 @@ class CalculadoraService {
         'El capital debe estar entre 10000 y 100000000 COP.',
       );
     }
+    if (!MonedaColombiana.esMultiploDeUnidad(capital)) {
+      throw ArgumentError.value(
+        capital,
+        'capital',
+        'El capital debe ser un múltiplo de \$1.000.',
+      );
+    }
     if (!porcentajeInteres.isFinite ||
         porcentajeInteres < 0 ||
         porcentajeInteres > 100) {
@@ -50,11 +65,27 @@ class CalculadoraService {
       );
     }
 
-    final montoInteres = _redondearDosDecimales(
+    final montoInteres = MonedaColombiana.redondearAUnidad(
       capital * (porcentajeInteres / 100),
     );
-    final montoTotalPagar = _redondearDosDecimales(capital + montoInteres);
-    final valorCuota = _redondearDosDecimales(montoTotalPagar / numCuotas);
+    final montoTotalPagar = capital + montoInteres;
+    final totalEnUnidades =
+        (montoTotalPagar / MonedaColombiana.unidadNegociacion).round();
+    if (numCuotas > totalEnUnidades) {
+      throw ArgumentError.value(
+        numCuotas,
+        'numCuotas',
+        'Cada cuota debe ser de al menos \$1.000.',
+      );
+    }
+    final unidadesPorCuota = totalEnUnidades ~/ numCuotas;
+    final unidadesAdicionales = totalEnUnidades % numCuotas;
+    final valoresCuota = List<double>.unmodifiable([
+      for (var indice = 0; indice < numCuotas; indice++)
+        (unidadesPorCuota + (indice < unidadesAdicionales ? 1 : 0)) *
+            MonedaColombiana.unidadNegociacion.toDouble(),
+    ]);
+    final valorCuota = valoresCuota.last;
     final gananciaDiariaPromedio = _redondearDosDecimales(
       montoInteres / numCuotas,
     );
@@ -67,6 +98,7 @@ class CalculadoraService {
       montoInteres: montoInteres,
       montoTotalPagar: montoTotalPagar,
       valorCuota: valorCuota,
+      valoresCuota: valoresCuota,
       gananciaDiariaPromedio: gananciaDiariaPromedio,
     );
   }
@@ -77,12 +109,14 @@ class CalculadoraService {
     required String frecuencia,
     List<int>? diasPersonalizados,
     bool saltarDomingos = false,
+    bool saltarFestivos = false,
   }) => generarFechasPago(
     fechaInicio: fechaInicio,
     numCuotas: numCuotas,
     frecuencia: frecuencia,
     diasPersonalizados: diasPersonalizados,
     saltarDomingos: saltarDomingos,
+    saltarFestivos: saltarFestivos,
   ).last;
 
   double calcularGananciaProporcional({
@@ -113,6 +147,7 @@ class CalculadoraService {
     required String frecuencia,
     List<int>? diasPersonalizados,
     bool saltarDomingos = false,
+    bool saltarFestivos = false,
   }) {
     if (numCuotas <= 0) {
       throw ArgumentError.value(
@@ -174,7 +209,21 @@ class CalculadoraService {
         }
     }
 
-    return fechas;
+    if (!saltarFestivos) return fechas;
+
+    final fechasAjustadas = <DateTime>[];
+    for (final fecha in fechas) {
+      var fechaAjustada = fecha;
+      while (fechaAjustada.weekday == DateTime.sunday ||
+          FestivosColombia.esFestivo(fechaAjustada) ||
+          (fechasAjustadas.isNotEmpty &&
+              !fechaAjustada.isAfter(fechasAjustadas.last))) {
+        fechaAjustada = _sumarDiasCalendario(fechaAjustada, 1);
+      }
+      fechasAjustadas.add(fechaAjustada);
+    }
+
+    return fechasAjustadas;
   }
 
   List<int> _validarDiasPersonalizados(List<int>? dias) {

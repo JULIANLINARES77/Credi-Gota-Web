@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/constants/db_constants.dart';
+import '../../core/utils/moneda_colombiana.dart';
 import '../models/cliente.dart';
 import '../models/cuota.dart';
 import '../models/pago.dart';
@@ -527,6 +528,10 @@ class DatabaseHelper {
         throw StateError(
           'No se pueden registrar pagos en un préstamo cerrado.',
         );
+      }
+      if (MonedaColombiana.esMultiploDeUnidad(installment.montoCuota) &&
+          !MonedaColombiana.esMultiploDeUnidad(pago.monto)) {
+        throw ArgumentError('El pago debe ser múltiplo de \$1.000.');
       }
 
       final installmentBalance =

@@ -78,25 +78,29 @@ void main() {
     expect(provider.clientes.single.cedula, '12345678');
   });
 
-  test('guarda el PIN hasheado y lo valida después de reabrir SQLite', () async {
-    await provider.cargarDatos();
-    await provider.configurarPin('123456');
+  test(
+    'guarda el PIN hasheado y lo valida después de reabrir SQLite',
+    () async {
+      await provider.cargarDatos();
+      await provider.configurarPin('123456');
 
-    final configuracion = await DatabaseHelper.instance.obtenerConfiguracion();
-    final hash = configuracion?[DbConstants.configuracionPinHash] as String?;
-    expect(hash, isNotNull);
-    expect(hash, isNot('123456'));
-    expect(hash, startsWith(r'$2a$12$'));
-    expect(configuracion?[DbConstants.configuracionPinSeguridad], isNull);
+      final configuracion = await DatabaseHelper.instance
+          .obtenerConfiguracion();
+      final hash = configuracion?[DbConstants.configuracionPinHash] as String?;
+      expect(hash, isNotNull);
+      expect(hash, isNot('123456'));
+      expect(hash, startsWith(r'$2a$12$'));
+      expect(configuracion?[DbConstants.configuracionPinSeguridad], isNull);
 
-    await DatabaseHelper.instance.close();
-    provider = GotaProvider(reloj: () => DateTime(2026, 9, 30, 12));
-    await provider.cargarDatos();
+      await DatabaseHelper.instance.close();
+      provider = GotaProvider(reloj: () => DateTime(2026, 9, 30, 12));
+      await provider.cargarDatos();
 
-    expect(provider.pinActivo, isTrue);
-    expect(await provider.validarPin('000000'), PinValidationResult.invalid);
-    expect(await provider.validarPin('123456'), PinValidationResult.valid);
-  });
+      expect(provider.pinActivo, isTrue);
+      expect(await provider.validarPin('000000'), PinValidationResult.invalid);
+      expect(await provider.validarPin('123456'), PinValidationResult.valid);
+    },
+  );
 
   test('rechaza PIN vacío o que no tenga entre 4 y 6 dígitos', () async {
     await provider.cargarDatos();
@@ -139,7 +143,10 @@ void main() {
 
     final configuracion = await DatabaseHelper.instance.obtenerConfiguracion();
 
-    expect(configuracion?[DbConstants.configuracionNombreNegocio], 'Negocio existente');
+    expect(
+      configuracion?[DbConstants.configuracionNombreNegocio],
+      'Negocio existente',
+    );
     expect(configuracion?[DbConstants.configuracionPinSeguridad], isNull);
     expect(configuracion?[DbConstants.configuracionPinHash], isNull);
     expect(configuracion?[DbConstants.configuracionDireccionNegocio], isNull);
@@ -150,29 +157,32 @@ void main() {
     expect(configuracion?[DbConstants.configuracionUltimoRespaldo], isNull);
   });
 
-  test('valida los ajustes aunque se actualicen fuera de la pantalla', () async {
-    await provider.cargarDatos();
-    await provider.guardarConfiguracion({
-      DbConstants.configuracionNombreNegocio: 'Negocio local',
-      DbConstants.configuracionTelefonoNegocio: '',
-      DbConstants.configuracionDireccionNegocio: '',
-      DbConstants.configuracionPorcentajeMora: 100,
-      DbConstants.configuracionDiasGraciaMora: 365,
-    });
+  test(
+    'valida los ajustes aunque se actualicen fuera de la pantalla',
+    () async {
+      await provider.cargarDatos();
+      await provider.guardarConfiguracion({
+        DbConstants.configuracionNombreNegocio: 'Negocio local',
+        DbConstants.configuracionTelefonoNegocio: '',
+        DbConstants.configuracionDireccionNegocio: '',
+        DbConstants.configuracionPorcentajeMora: 100,
+        DbConstants.configuracionDiasGraciaMora: 365,
+      });
 
-    await expectLater(
-      provider.guardarConfiguracion({
-        DbConstants.configuracionNombreNegocio: ' ',
-      }),
-      throwsArgumentError,
-    );
-    await expectLater(
-      provider.guardarConfiguracion({
-        DbConstants.configuracionPorcentajeMora: 101,
-      }),
-      throwsArgumentError,
-    );
-  });
+      await expectLater(
+        provider.guardarConfiguracion({
+          DbConstants.configuracionNombreNegocio: ' ',
+        }),
+        throwsArgumentError,
+      );
+      await expectLater(
+        provider.guardarConfiguracion({
+          DbConstants.configuracionPorcentajeMora: 101,
+        }),
+        throwsArgumentError,
+      );
+    },
+  );
 
   test('conserva varios préstamos del mismo cliente y sus cuotas', () async {
     await provider.cargarDatos();
@@ -199,10 +209,10 @@ void main() {
 
     final prestamosCliente = provider.prestamosDeCliente(cliente.id!);
     expect(prestamosCliente, hasLength(2));
-    expect(prestamosCliente.map((prestamo) => prestamo.id), containsAll([
-      primerPrestamo.id,
-      segundoPrestamo.id,
-    ]));
+    expect(
+      prestamosCliente.map((prestamo) => prestamo.id),
+      containsAll([primerPrestamo.id, segundoPrestamo.id]),
+    );
     expect(provider.cuotasDePrestamo(primerPrestamo.id!), hasLength(4));
     expect(provider.cuotasDePrestamo(segundoPrestamo.id!), hasLength(2));
   });
@@ -225,19 +235,17 @@ void main() {
     await provider.registrarPago(
       prestamoId: prestamo.id!,
       cuotaId: cuota.id!,
-      monto: 100,
+      monto: 1000,
       metodoPago: 'EFECTIVO',
       fecha: DateTime(2026, 9, 30, 13),
     );
 
     final csv = DatabaseExportService.exportarCsv(provider);
 
-    expect(csv.keys, containsAll([
-      'clientes.csv',
-      'prestamos.csv',
-      'cuotas.csv',
-      'pagos.csv',
-    ]));
+    expect(
+      csv.keys,
+      containsAll(['clientes.csv', 'prestamos.csv', 'cuotas.csv', 'pagos.csv']),
+    );
     expect(csv['clientes.csv']!.take(3), [0xEF, 0xBB, 0xBF]);
     expect(
       String.fromCharCodes(csv['prestamos.csv']!),
@@ -247,10 +255,7 @@ void main() {
       String.fromCharCodes(csv['cuotas.csv']!),
       contains('"${prestamo.id}"'),
     );
-    expect(
-      String.fromCharCodes(csv['pagos.csv']!),
-      contains('"${cuota.id}"'),
-    );
+    expect(String.fromCharCodes(csv['pagos.csv']!), contains('"${cuota.id}"'));
   });
 
   test('registra un pago y marca cuota y préstamo pagados', () async {
@@ -287,6 +292,55 @@ void main() {
     await provider.cargarDatos(mostrarCarga: false);
     expect(provider.cargando, isFalse);
     expect(provider.pagosDePrestamo(prestamo.id!), hasLength(1));
+  });
+
+  test('acepta abonos parciales en miles y rechaza importes menores', () async {
+    await provider.cargarDatos();
+    await provider.agregarCliente(
+      nombre: 'Cliente de abono parcial',
+      telefono: '3001234567',
+    );
+    final cliente = provider.clientes.single;
+    final prestamo = await provider.crearPrestamo(
+      clienteId: cliente.id!,
+      capital: 900000,
+      porcentajeInteres: 0,
+      numCuotas: 3,
+      frecuencia: CalculadoraService.frecuenciaDiaria,
+    );
+    final cuotas = provider.cuotasDePrestamo(prestamo.id!);
+    final cuota = cuotas.first;
+    expect(cuotas.map((item) => item.montoCuota), [300000, 300000, 300000]);
+    expect(
+      cuotas.fold<double>(0, (total, item) => total + item.montoCuota),
+      900000,
+    );
+
+    await expectLater(
+      provider.registrarPago(
+        prestamoId: prestamo.id!,
+        cuotaId: cuota.id!,
+        monto: 500,
+        metodoPago: 'EFECTIVO',
+        fecha: DateTime(2026, 9, 30, 13),
+      ),
+      throwsArgumentError,
+    );
+    final pago = await provider.registrarPago(
+      prestamoId: prestamo.id!,
+      cuotaId: cuota.id!,
+      monto: 200000,
+      metodoPago: 'EFECTIVO',
+      fecha: DateTime(2026, 9, 30, 13),
+    );
+
+    expect(pago.monto, 200000);
+    expect(provider.cuotasDePrestamo(prestamo.id!).first.montoPagado, 200000);
+    expect(
+      cuota.montoCuota -
+          provider.cuotasDePrestamo(prestamo.id!).first.montoPagado,
+      100000,
+    );
   });
 
   test('bloquea eliminación con deuda y la permite a paz y salvo', () async {

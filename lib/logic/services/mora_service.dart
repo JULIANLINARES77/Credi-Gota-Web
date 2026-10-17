@@ -3,6 +3,7 @@ import '../../data/database/database_helper.dart';
 import '../../data/models/cliente.dart';
 import '../../data/models/cuota.dart';
 import '../../data/models/prestamo.dart';
+import '../../core/utils/moneda_colombiana.dart';
 import 'calculadora_service.dart';
 
 class PrestamoEnMora {
@@ -61,7 +62,10 @@ class MoraService {
       );
     }
     if (calcularDiasAtraso(cuota.fechaVencimiento) < diasGracia) return 0;
-    return _redondearDosDecimales(cuota.montoCuota * porcentajeMora / 100);
+    final penalizacion = cuota.montoCuota * porcentajeMora / 100;
+    return MonedaColombiana.esMultiploDeUnidad(cuota.montoCuota)
+        ? MonedaColombiana.redondearAUnidad(penalizacion)
+        : _redondearDosDecimales(penalizacion);
   }
 
   String verificarEstadoCuota(Cuota cuota) {

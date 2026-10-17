@@ -58,6 +58,10 @@ internal object LocalBackupContract {
     const val MAX_AUTOMATIC_BACKUPS = 30
     const val UNIQUE_WORK_NAME = "gotacontrol-database-backup"
     const val INITIAL_WORK_NAME = "gotacontrol-initial-database-backup"
+    private val DOCUMENTS_BACKUP_PATH =
+        "${Environment.DIRECTORY_DOCUMENTS}/$BACKUP_FOLDER/"
+    private val LEGACY_DOWNLOADS_BACKUP_PATH =
+        "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_FOLDER/"
     val operationLock = Any()
 
     private const val PREFERENCES = "gotacontrol_local_backup"
@@ -75,7 +79,7 @@ internal object LocalBackupContract {
             .putString(STORED_DATABASE_PATH, databasePath)
             .apply()
 
-        val treeUri = preferences.getString(STORED_TREE_URI, null)
+        val treeUri = storedTreeUri(context)?.toString()
         if (treeUri.isNullOrBlank() && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
             return false
@@ -147,6 +151,7 @@ internal object LocalBackupContract {
         automatic: Boolean,
         prefixOverride: String? = null,
     ): String = synchronized(operationLock) {
+        val destinationTreeUri = usableTreeUri(context, treeUri)
         val source = File(databasePath)
         if (!source.isFile) {
             throw IllegalStateException("No se encontró la base de datos local.")
@@ -160,15 +165,18 @@ internal object LocalBackupContract {
             val prefix = prefixOverride ?: if (automatic) AUTOMATIC_PREFIX else MANUAL_PREFIX
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val name = "$prefix$timestamp.db"
-            if (treeUri == null) {
+            if (destinationTreeUri == null) {
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    throw IllegalStateException("El respaldo predeterminado requiere Android 10 o posterior.")
+                    throw IllegalStateException(
+                        "La carpeta seleccionada no está disponible y el respaldo "
+                            + "automático requiere Android 10 o posterior.",
+                    )
                 }
                 createMediaStoreBackup(context, snapshot, name)
                 recordDatabaseBackup(databasePath)
                 if (automatic) pruneMediaStoreBackups(context)
             } else {
-                val directory = backupFolder(context, treeUri)
+                val directory = backupFolder(context, destinationTreeUri)
                 val destination = directory.createFile("application/vnd.sqlite3", name)
                     ?: throw IllegalStateException("No se pudo crear el archivo de respaldo.")
                 try {
@@ -272,15 +280,15 @@ internal object LocalBackupContract {
 
     fun status(context: Context): Map<String, Any?> {
         val preferences = preferences(context)
-        val treeUri = preferences.getString(STORED_TREE_URI, null)
+        val treeUri = storedTreeUri(context)?.toString()
         val automaticDestination = treeUri.isNullOrBlank() &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         val folder = treeUri?.let {
             DocumentFile.fromTreeUri(context, Uri.parse(it))?.name
-        } ?: if (automaticDestination) "Descargas/GotaControl" else null
+        } ?: if (automaticDestination) "Documentos/GotaControl" else null
         return mapOf(
             "folderUri" to (
-                treeUri ?: if (automaticDestination) "mediastore:downloads/gotacontrol" else null
+                treeUri ?: if (automaticDestination) "mediastore:documents/gotacontrol" else null
             ),
             "folderName" to folder,
             "automaticDestination" to automaticDestination,
@@ -303,8 +311,24 @@ internal object LocalBackupContract {
         preferences.edit().putString(STORED_TREE_URI, uri.toString()).apply()
     }
 
-    fun storedTreeUri(context: Context): Uri? =
-        preferences(context).getString(STORED_TREE_URI, null)?.let(Uri::parse)
+    fun storedTreeUri(context: Context): Uri? {
+        val preferences = preferences(context)
+        val stored = preferences.getString(STORED_TREE_URI, null)
+            ?.let(Uri::parse) ?: return null
+        if (usableTreeUri(context, stored) != null) return stored
+        preferences.edit().remove(STORED_TREE_URI).apply()
+        return null
+    }
+
+    private fun usableTreeUri(context: Context, treeUri: Uri?): Uri? {
+        if (treeUri == null) return null
+        return try {
+            val directory = DocumentFile.fromTreeUri(context, treeUri)
+            treeUri.takeIf { directory?.isDirectory == true && directory.canWrite() }
+        } catch (_: SecurityException) {
+            null
+        }
+    }
 
     fun restoreLatestDefaultBackupIfMissing(
         context: Context,
@@ -521,6 +545,7 @@ internal object LocalBackupContract {
         val uri: Uri,
         val name: String,
         val modifiedSeconds: Long,
+        val relativePath: String,
     )
 
     private fun databaseHasBusinessData(file: File): Boolean {
@@ -545,13 +570,16 @@ internal object LocalBackupContract {
             put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.sqlite3")
             put(
                 MediaStore.MediaColumns.RELATIVE_PATH,
-                "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_FOLDER/",
+                DOCUMENTS_BACKUP_PATH,
             )
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val uri = context.contentResolver.insert(collection, values)
-            ?: throw IllegalStateException("No se pudo crear Descargas/$BACKUP_FOLDER.")
+            ?: throw IllegalStateException(
+                "No se pudo crear Documentos/$BACKUP_FOLDER. "
+                    + "Comprueba el espacio disponible en el dispositivo.",
+            )
         try {
             context.contentResolver.openOutputStream(uri, "w").use { output ->
                 if (output == null) throw IllegalStateException("No se pudo escribir el respaldo.")
@@ -562,7 +590,7 @@ internal object LocalBackupContract {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
             if (context.contentResolver.update(uri, published, null, null) != 1) {
-                throw IllegalStateException("No se pudo publicar el archivo en Descargas.")
+                throw IllegalStateException("No se pudo publicar el archivo en Documentos.")
             }
         } catch (error: Exception) {
             context.contentResolver.delete(uri, null, null)
@@ -572,48 +600,56 @@ internal object LocalBackupContract {
 
     private fun mediaStoreBackups(context: Context): List<MediaStoreBackup> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return emptyList()
-        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.RELATIVE_PATH,
         )
-        val path = "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_FOLDER/"
-        return context.contentResolver.query(
-            collection,
-            projection,
-            "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
-            arrayOf(path),
-            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
-        )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-            val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-            buildList {
-                while (cursor.moveToNext()) {
-                    val name = cursor.getString(nameColumn) ?: continue
-                    if (!name.startsWith(AUTOMATIC_PREFIX) &&
-                        !name.startsWith(MANUAL_PREFIX) &&
-                        !name.startsWith(PRE_RESTORE_PREFIX)
-                    ) continue
-                    add(
-                        MediaStoreBackup(
-                            ContentUris.withAppendedId(
-                                collection,
-                                cursor.getLong(idColumn),
-                            ),
-                            name,
-                            cursor.getLong(modifiedColumn),
-                        ),
-                    )
-                }
+        return listOf(DOCUMENTS_BACKUP_PATH, LEGACY_DOWNLOADS_BACKUP_PATH)
+            .flatMap { path ->
+                context.contentResolver.query(
+                    collection,
+                    projection,
+                    "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+                    arrayOf(path),
+                    "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
+                )?.use { cursor ->
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val modifiedColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+                    val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+                    buildList {
+                        while (cursor.moveToNext()) {
+                            val name = cursor.getString(nameColumn) ?: continue
+                            if (!name.startsWith(AUTOMATIC_PREFIX) &&
+                                !name.startsWith(MANUAL_PREFIX) &&
+                                !name.startsWith(PRE_RESTORE_PREFIX)
+                            ) continue
+                            add(
+                                MediaStoreBackup(
+                                    ContentUris.withAppendedId(
+                                        collection,
+                                        cursor.getLong(idColumn),
+                                    ),
+                                    name,
+                                    cursor.getLong(modifiedColumn),
+                                    cursor.getString(pathColumn),
+                                ),
+                            )
+                        }
+                    }
+                } ?: emptyList()
             }
-        } ?: emptyList()
     }
 
     private fun pruneMediaStoreBackups(context: Context) {
         mediaStoreBackups(context)
-            .filter { it.name.startsWith(AUTOMATIC_PREFIX) }
+            .filter {
+                it.relativePath == DOCUMENTS_BACKUP_PATH &&
+                    it.name.startsWith(AUTOMATIC_PREFIX)
+            }
             .sortedByDescending { it.name }
             .drop(MAX_AUTOMATIC_BACKUPS)
             .forEach { backup ->

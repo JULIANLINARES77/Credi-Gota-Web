@@ -414,7 +414,9 @@ class _AjustesScreenState extends State<AjustesScreen>
   List<Widget> _contenidoRespaldo(GotaProvider provider) => [
     Text(
       _estadoRespaldo?.automaticDestination == true
-          ? 'La app crea automáticamente Descargas/GotaControl. La carpeta y '
+          ? 'La app crea automáticamente Documentos/GotaControl. Si la carpeta '
+                'Documentos o GotaControl no existe, Android la crea al guardar. '
+                'La carpeta y '
                 'sus copias quedan fuera de los datos de la app. Al reinstalar, '
                 'Android pedirá acceso a la carpeta y se restaurará la copia '
                 'válida más reciente antes de abrir la base.'

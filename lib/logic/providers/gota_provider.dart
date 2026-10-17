@@ -314,6 +314,7 @@ class GotaProvider extends ChangeNotifier {
     required int numCuotas,
     required String frecuencia,
     List<int>? diasPersonalizados,
+    bool saltarFestivos = false,
   }) async {
     final cliente = clientePorId(clienteId);
     if (cliente == null || !cliente.activo) {
@@ -331,6 +332,7 @@ class GotaProvider extends ChangeNotifier {
       numCuotas: numCuotas,
       frecuencia: frecuencia,
       diasPersonalizados: diasPersonalizados,
+      saltarFestivos: saltarFestivos,
     );
     final prestamo = Prestamo(
       clienteId: clienteId,
@@ -355,7 +357,7 @@ class GotaProvider extends ChangeNotifier {
           prestamoId: 0,
           numeroCuota: indice + 1,
           fechaVencimiento: fechas[indice],
-          montoCuota: calculo.valorCuota,
+          montoCuota: calculo.valoresCuota[indice],
         ),
     ];
 

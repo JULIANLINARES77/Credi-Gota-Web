@@ -5,6 +5,27 @@ import 'package:flutter_prestamos/logic/providers/gota_provider.dart';
 import 'package:flutter_prestamos/ui/screens/prestamos/nuevo_prestamo_screen.dart';
 
 void main() {
+  testWidgets('permite excluir domingos y festivos del calendario de cuotas', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => GotaProvider()..cargando = false,
+        child: const MaterialApp(home: NuevoPrestamoScreen()),
+      ),
+    );
+
+    final selector = find.byType(SwitchListTile);
+    expect(selector, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(selector).value, isTrue);
+
+    await tester.ensureVisible(selector);
+    await tester.tap(selector);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<SwitchListTile>(selector).value, isFalse);
+  });
+
   testWidgets('valida capital, interés y cuotas con los límites QA', (
     tester,
   ) async {
@@ -24,6 +45,7 @@ void main() {
 
     expect(validarCapital('9.999'), contains('10.000'));
     expect(validarCapital('100.000.001'), contains('100.000.000'));
+    expect(validarCapital('10.500'), contains('múltiplo de \$1.000'));
     expect(validarCapital('10.000'), isNull);
     expect(validarCapital('100.000.000'), isNull);
 

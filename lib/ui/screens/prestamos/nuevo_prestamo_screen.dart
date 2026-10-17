@@ -29,6 +29,7 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
   final _calculadora = const CalculadoraService();
   Timer? _debounce;
   bool _creandoPrestamo = false;
+  bool _saltarFestivos = true;
   int? _clienteId;
   String _frecuencia = CalculadoraService.frecuenciaLunesMiercolesViernes;
   final Set<int> _dias = {DateTime.monday, DateTime.wednesday, DateTime.friday};
@@ -131,7 +132,7 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Capital prestado',
                     prefixText: '\$ ',
-                    hintText: '1.000.000 (de 10.000 a 100.000.000)',
+                    hintText: 'Múltiplos de 1.000 (de 10.000 a 100.000.000)',
                   ),
                   validator: _validarCapital,
                 ),
@@ -201,6 +202,16 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
                   onChanged: (valor) =>
                       setState(() => _frecuencia = valor ?? _frecuencia),
                 ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Evitar domingos y festivos colombianos'),
+                  subtitle: const Text(
+                    'Las cuotas pasarán al siguiente día disponible.',
+                  ),
+                  value: _saltarFestivos,
+                  onChanged: (valor) => setState(() => _saltarFestivos = valor),
+                ),
                 if (_frecuencia ==
                     CalculadoraService.frecuenciaPersonalizada) ...[
                   const SizedBox(height: 14),
@@ -251,10 +262,14 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ResumenCard(
-                              titulo: 'Valor de cuota',
-                              valor: GotaDateUtils.formatearMoneda(
-                                calculo.valorCuota,
-                              ),
+                              titulo: calculo.valorCuota == calculo.valorCuotaMaxima
+                                  ? 'Valor de cuota'
+                                  : 'Cuotas entre',
+                              valor: calculo.valorCuota == calculo.valorCuotaMaxima
+                                  ? GotaDateUtils.formatearMoneda(
+                                      calculo.valorCuota,
+                                    )
+                                  : '${GotaDateUtils.formatearMoneda(calculo.valorCuota)} y ${GotaDateUtils.formatearMoneda(calculo.valorCuotaMaxima)}',
                               icono: Icons.event_repeat,
                               color: AppColors.warning,
                             ),
@@ -338,6 +353,9 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
         capital > 100000000) {
       return 'El capital debe estar entre \$10.000 y \$100.000.000';
     }
+    if (capital % 1000 != 0) {
+      return 'El capital debe ser múltiplo de \$1.000';
+    }
     return null;
   }
 
@@ -353,6 +371,26 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
     final cantidad = int.tryParse(valor ?? '');
     if (cantidad == null || cantidad < 1 || cantidad > 365) {
       return 'El número de cuotas debe estar entre 1 y 365';
+    }
+    final capital = _parsearCapital(_capital.text);
+    final interes = _parsear(_interes.text);
+    if (capital != null &&
+        capital >= 10000 &&
+        capital <= 100000000 &&
+        interes != null &&
+        interes >= 0 &&
+        interes <= 100) {
+      try {
+        _calculadora.calcularPrestamo(
+          capital: capital,
+          porcentajeInteres: interes,
+          numCuotas: cantidad,
+        );
+      } on ArgumentError catch (error) {
+        if (error.name == 'numCuotas') {
+          return 'Cada cuota debe ser de al menos \$1.000';
+        }
+      }
     }
     return null;
   }
@@ -403,6 +441,7 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
             _frecuencia == CalculadoraService.frecuenciaPersonalizada
             ? _dias.toList()
             : null,
+        saltarFestivos: _saltarFestivos,
       );
     } on Object {
       return null;
@@ -446,6 +485,7 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
             _frecuencia == CalculadoraService.frecuenciaPersonalizada
             ? _dias.toList()
             : null,
+        saltarFestivos: _saltarFestivos,
       );
     } on Object catch (error) {
       if (!mounted) return;

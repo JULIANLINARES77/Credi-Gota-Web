@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_prestamos/core/utils/festivos_colombia.dart';
 import 'package:flutter_prestamos/logic/services/calculadora_service.dart';
 
 void main() {
   const calculadora = CalculadoraService();
 
   group('calcularPrestamo', () {
-    test('calcula interés simple y redondea cada resultado a centavos', () {
+    test('calcula interés simple y mantiene los importes en miles de pesos', () {
       final resultado = calculadora.calcularPrestamo(
         capital: 1000000,
         porcentajeInteres: 20,
@@ -15,7 +16,21 @@ void main() {
       expect(resultado.montoInteres, 200000);
       expect(resultado.montoTotalPagar, 1200000);
       expect(resultado.valorCuota, 50000);
+      expect(resultado.valoresCuota, List<double>.filled(24, 50000));
       expect(resultado.gananciaDiariaPromedio, 8333.33);
+    });
+
+    test('distribuye el residuo entre cuotas sin alterar el total', () {
+      final resultado = calculadora.calcularPrestamo(
+        capital: 1000000,
+        porcentajeInteres: 0,
+        numCuotas: 3,
+      );
+
+      expect(resultado.valoresCuota, [334000, 333000, 333000]);
+      expect(resultado.valoresCuota.reduce((a, b) => a + b), 1000000);
+      expect(resultado.valoresCuota.every((valor) => valor % 1000 == 0), isTrue);
+      expect(resultado.valorCuotaMaxima, 334000);
     });
 
     test('rechaza valores fuera de rango', () {
@@ -37,6 +52,14 @@ void main() {
       );
       expect(
         () => calculadora.calcularPrestamo(
+          capital: 100500,
+          porcentajeInteres: 20,
+          numCuotas: 4,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => calculadora.calcularPrestamo(
           capital: 100000001,
           porcentajeInteres: 20,
           numCuotas: 4,
@@ -48,6 +71,14 @@ void main() {
           capital: 10000,
           porcentajeInteres: -1,
           numCuotas: 4,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => calculadora.calcularPrestamo(
+          capital: 10000,
+          porcentajeInteres: 0,
+          numCuotas: 11,
         ),
         throwsArgumentError,
       );
@@ -161,6 +192,30 @@ void main() {
       expect(fechas, [DateTime(2026, 10, 5), DateTime(2026, 10, 6)]);
     });
 
+    test('desplaza cuotas que caen en domingos o festivos colombianos', () {
+      final fechas = calculadora.generarFechasPago(
+        fechaInicio: DateTime(2026, 7, 18),
+        numCuotas: 2,
+        frecuencia: CalculadoraService.frecuenciaDiaria,
+        saltarFestivos: true,
+      );
+
+      expect(fechas, [DateTime(2026, 7, 21), DateTime(2026, 7, 22)]);
+    });
+
+    test(
+      'mantiene festivos en el calendario si la opción está desactivada',
+      () {
+        final fechas = calculadora.generarFechasPago(
+          fechaInicio: DateTime(2025, 12, 31),
+          numCuotas: 1,
+          frecuencia: CalculadoraService.frecuenciaDiaria,
+        );
+
+        expect(fechas, [DateTime(2026, 1, 1)]);
+      },
+    );
+
     test('semanal conserva weekday y quincenal suma quince días', () {
       final semanales = calculadora.generarFechasPago(
         fechaInicio: lunes,
@@ -206,6 +261,21 @@ void main() {
         ),
         throwsArgumentError,
       );
+    });
+  });
+
+  group('FestivosColombia', () {
+    test('reconoce festivos fijos y Semana Santa', () {
+      expect(FestivosColombia.esFestivo(DateTime(2026, 1, 1)), isTrue);
+      expect(FestivosColombia.esFestivo(DateTime(2026, 7, 20)), isTrue);
+      expect(FestivosColombia.esFestivo(DateTime(2026, 12, 25)), isTrue);
+      expect(FestivosColombia.esFestivo(DateTime(2026, 4, 2)), isTrue);
+      expect(FestivosColombia.esFestivo(DateTime(2026, 4, 3)), isTrue);
+    });
+
+    test('reconoce los festivos trasladados al lunes por Ley Emiliani', () {
+      expect(FestivosColombia.esFestivo(DateTime(2026, 1, 12)), isTrue);
+      expect(FestivosColombia.esFestivo(DateTime(2026, 1, 6)), isFalse);
     });
   });
 }
