@@ -103,10 +103,10 @@ class GotaProvider extends ChangeNotifier {
   List<Cuota> get todasLasCuotas =>
       List.unmodifiable(_cuotasPorPrestamo.values.expand((cuotas) => cuotas));
 
-  Future<void> cargarDatos() async {
-    cargando = true;
+  Future<void> cargarDatos({bool mostrarCarga = true}) async {
+    if (mostrarCarga) cargando = true;
     errorCarga = null;
-    _safeNotify();
+    if (mostrarCarga) _safeNotify();
 
     try {
       final clientes = await _databaseHelper.obtenerTodosLosClientes();
@@ -171,7 +171,7 @@ class GotaProvider extends ChangeNotifier {
       errorCarga = error.toString();
       debugPrint('GotaControl: error cargando SQLite: $error\n$stackTrace');
     } finally {
-      cargando = false;
+      if (mostrarCarga) cargando = false;
       _safeNotify();
     }
   }
@@ -299,10 +299,7 @@ class GotaProvider extends ChangeNotifier {
     if (cambios.keys.any(camposValidados.contains)) {
       final configuracionActual =
           _configuracion ?? await _databaseHelper.obtenerConfiguracion() ?? {};
-      AjustesNegocioValidator.validar({
-        ...configuracionActual,
-        ...cambios,
-      });
+      AjustesNegocioValidator.validar({...configuracionActual, ...cambios});
     }
     await _databaseHelper.guardarConfiguracion(cambios);
     _configuracion = await _databaseHelper.obtenerConfiguracion();
@@ -406,12 +403,80 @@ class GotaProvider extends ChangeNotifier {
 
     try {
       final pagoId = await _databaseHelper.registrarPago(pago);
-      await cargarDatos();
-      return pago.copyWith(id: pagoId);
+      final pagoRegistrado = pago.copyWith(id: pagoId);
+      _actualizarPagoEnMemoria(pagoRegistrado, prestamo);
+      _safeNotify();
+      return pagoRegistrado;
     } on Object catch (error, stackTrace) {
       debugPrint('GotaControl: error al registrar pago: $error\n$stackTrace');
       rethrow;
     }
+  }
+
+  void _actualizarPagoEnMemoria(Pago pago, Prestamo prestamo) {
+    final cuotas = _cuotasPorPrestamo[pago.prestamoId];
+    final indiceCuota = cuotas?.indexWhere((cuota) => cuota.id == pago.cuotaId);
+    final pagoTotalCuota =
+        cuotas != null && indiceCuota != null && indiceCuota >= 0
+        ? cuotas[indiceCuota].montoPagado + pago.monto
+        : null;
+
+    if (cuotas != null && indiceCuota != null && indiceCuota >= 0) {
+      final cuota = cuotas[indiceCuota];
+      final quedaPagada = cuota.montoCuota - pagoTotalCuota! <= 0.000001;
+      _cuotasPorPrestamo[pago.prestamoId] = [
+        ...cuotas.take(indiceCuota),
+        cuota.copyWith(
+          montoPagado: pagoTotalCuota,
+          fechaPago: quedaPagada ? pago.fechaHora : null,
+          estado: quedaPagada ? 'PAGADA' : 'PARCIAL',
+        ),
+        ...cuotas.skip(indiceCuota + 1),
+      ];
+    }
+
+    final saldoPendiente = (prestamo.saldoPendiente - pago.monto).clamp(
+      0.0,
+      double.infinity,
+    );
+    final tieneMora = (_cuotasPorPrestamo[pago.prestamoId] ?? const <Cuota>[])
+        .any(
+          (cuota) =>
+              cuota.estado != 'PAGADA' &&
+              _soloFecha(
+                cuota.fechaVencimiento,
+              ).isBefore(_soloFecha(DateTime.now())),
+        );
+    final indicePrestamo = _prestamos.indexWhere(
+      (item) => item.id == pago.prestamoId,
+    );
+    final prestamoActualizado = prestamo.copyWith(
+      saldoPendiente: saldoPendiente,
+      totalPagado: prestamo.totalPagado + pago.monto,
+      estado: saldoPendiente <= 0.000001
+          ? 'PAGADO'
+          : tieneMora
+          ? 'MORA'
+          : 'ACTIVO',
+    );
+    if (indicePrestamo >= 0) _prestamos[indicePrestamo] = prestamoActualizado;
+
+    _pagos
+      ..add(pago)
+      ..sort((a, b) => b.fechaHora.compareTo(a.fechaHora));
+    if (_mismaFecha(pago.fechaHora, _reloj())) {
+      _pagosHoy
+        ..add(pago)
+        ..sort((a, b) => b.fechaHora.compareTo(a.fechaHora));
+    }
+    _moras = _construirMoras(
+      prestamos: _prestamos,
+      clientesPorId: {
+        for (final cliente in _clientes)
+          if (cliente.id != null) cliente.id!: cliente,
+      },
+      cuotasPorPrestamo: _cuotasPorPrestamo,
+    );
   }
 
   Cliente? clientePorId(int id) {

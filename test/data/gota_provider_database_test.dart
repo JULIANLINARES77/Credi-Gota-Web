@@ -282,6 +282,11 @@ void main() {
     expect(provider.prestamoPorId(prestamo.id!)!.saldoPendiente, 0);
     expect(provider.cuotasDePrestamo(prestamo.id!).single.estado, 'PAGADA');
     expect(provider.pagosDePrestamo(prestamo.id!), hasLength(1));
+    expect(provider.pagosHoy, hasLength(1));
+
+    await provider.cargarDatos(mostrarCarga: false);
+    expect(provider.cargando, isFalse);
+    expect(provider.pagosDePrestamo(prestamo.id!), hasLength(1));
   });
 
   test('bloquea eliminación con deuda y la permite a paz y salvo', () async {

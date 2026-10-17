@@ -24,6 +24,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
   int? _clienteId;
   bool _vistaPrevia = false;
   bool _generando = false;
+  bool _pdfAmpliado = false;
+  int _pdfPreviewKey = 0;
   Uint8List? _bytesReporte;
 
   static const _reportes = {
@@ -69,6 +71,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                       onTap: () => setState(() {
                         _tipo = entrada.key;
                         _vistaPrevia = false;
+                        _pdfAmpliado = false;
                         _bytesReporte = null;
                       }),
                     ),
@@ -90,6 +93,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   onChanged: (valor) => setState(() {
                     _clienteId = valor;
                     _vistaPrevia = false;
+                    _pdfAmpliado = false;
                     _bytesReporte = null;
                   }),
                 )
@@ -116,14 +120,42 @@ class _ReportesScreenState extends State<ReportesScreen> {
                   height: 620,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: PdfPreview(
-                      build: (_) async =>
-                          _bytesReporte ?? await _generarBytes(demo, cliente),
-                      pdfFileName: 'GotaControl-$_tipo.pdf',
-                      canChangeOrientation: false,
-                      canChangePageFormat: false,
-                      allowPrinting: false,
-                      allowSharing: false,
+                    child: Stack(
+                      children: [
+                        PdfPreview(
+                          key: ValueKey(_pdfPreviewKey),
+                          build: (_) async =>
+                              _bytesReporte ??
+                              await _generarBytes(demo, cliente),
+                          pdfFileName: 'GotaControl-$_tipo.pdf',
+                          canChangeOrientation: false,
+                          canChangePageFormat: false,
+                          allowPrinting: false,
+                          allowSharing: false,
+                          onZoomChanged: (ampliado) {
+                            if (_pdfAmpliado != ampliado && mounted) {
+                              setState(() => _pdfAmpliado = ampliado);
+                            }
+                          },
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: IconButton.filledTonal(
+                            tooltip: _pdfAmpliado
+                                ? 'Volver al tamaño normal'
+                                : 'Ampliar reporte',
+                            onPressed: _pdfAmpliado
+                                ? _restaurarVistaPdf
+                                : _abrirVistaPdfCompleta,
+                            icon: Icon(
+                              _pdfAmpliado
+                                  ? Icons.fullscreen_exit
+                                  : Icons.fullscreen,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -193,9 +225,27 @@ class _ReportesScreenState extends State<ReportesScreen> {
       setState(() {
         _fecha = fecha;
         _vistaPrevia = false;
+        _pdfAmpliado = false;
         _bytesReporte = null;
       });
     }
+  }
+
+  void _restaurarVistaPdf() {
+    setState(() {
+      _pdfAmpliado = false;
+      _pdfPreviewKey++;
+    });
+  }
+
+  Future<void> _abrirVistaPdfCompleta() async {
+    final bytes = _bytesReporte;
+    if (bytes == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) =>
+          _VistaPdfCompleta(bytes: bytes, nombre: 'GotaControl-$_tipo.pdf'),
+    );
   }
 
   Future<void> _crearVistaPrevia(
@@ -209,6 +259,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
       setState(() {
         _bytesReporte = bytes;
         _vistaPrevia = true;
+        _pdfAmpliado = false;
+        _pdfPreviewKey++;
       });
     } on Object catch (error) {
       _mostrarError('No se pudo generar el reporte: $error');
@@ -249,6 +301,69 @@ class _ReportesScreenState extends State<ReportesScreen> {
           StateError('Selecciona un cliente para generar el estado de cuenta.'),
         ),
       };
+}
+
+class _VistaPdfCompleta extends StatefulWidget {
+  const _VistaPdfCompleta({required this.bytes, required this.nombre});
+
+  final Uint8List bytes;
+  final String nombre;
+
+  @override
+  State<_VistaPdfCompleta> createState() => _VistaPdfCompletaState();
+}
+
+class _VistaPdfCompletaState extends State<_VistaPdfCompleta> {
+  bool _pdfAmpliado = false;
+  int _pdfPreviewKey = 0;
+
+  void _restaurarVistaPdf() {
+    setState(() {
+      _pdfAmpliado = false;
+      _pdfPreviewKey++;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog.fullscreen(
+    child: SafeArea(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: PdfPreview(
+              key: ValueKey(_pdfPreviewKey),
+              build: (_) async => widget.bytes,
+              pdfFileName: widget.nombre,
+              canChangeOrientation: false,
+              canChangePageFormat: false,
+              allowPrinting: false,
+              allowSharing: false,
+              onZoomChanged: (ampliado) {
+                if (_pdfAmpliado != ampliado && mounted) {
+                  setState(() => _pdfAmpliado = ampliado);
+                }
+              },
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton.filledTonal(
+              tooltip: _pdfAmpliado
+                  ? 'Volver al tamaño normal'
+                  : 'Cerrar vista ampliada',
+              onPressed: _pdfAmpliado
+                  ? _restaurarVistaPdf
+                  : () => Navigator.of(context).pop(),
+              icon: Icon(
+                _pdfAmpliado ? Icons.fullscreen_exit : Icons.close_fullscreen,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ReporteChoice extends StatelessWidget {

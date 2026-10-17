@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +48,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   DateTime _fecha = DateTime.now();
   String _metodo = 'EFECTIVO';
   String? _error;
+  bool _guardando = false;
 
   @override
   void initState() {
@@ -162,11 +165,17 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
             ],
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: _confirmar,
-              icon: const Icon(Icons.check),
-              label: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 13),
-                child: Text('Confirmar pago'),
+              onPressed: _guardando ? null : _confirmar,
+              icon: _guardando
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check),
+              label: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                child: Text(_guardando ? 'Guardando...' : 'Confirmar pago'),
               ),
             ),
           ],
@@ -186,6 +195,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   }
 
   Future<void> _confirmar() async {
+    if (_guardando) return;
     final monto = _parsearMonto(_montoController.text);
     if (monto == null || monto <= 0) {
       setState(() => _error = 'Ingresa un monto válido mayor a cero.');
@@ -198,6 +208,11 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       setState(() => _error = 'Datos del préstamo incompletos.');
       return;
     }
+
+    setState(() {
+      _guardando = true;
+      _error = null;
+    });
 
     try {
       final provider = context.read<GotaProvider>();
@@ -215,36 +230,66 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
             : _notaController.text.trim(),
       );
 
-      String? errorNotificaciones;
-      try {
-        await NotificacionService.instance.sincronizarConDatos(provider);
-      } on Object catch (error) {
-        errorNotificaciones = error.toString();
-      }
-      if (!mounted) return;
-      navigator.pop();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            errorNotificaciones == null
-                ? 'Pago registrado correctamente'
-                : 'Pago registrado, pero no se actualizaron las '
-                      'notificaciones: $errorNotificaciones',
+      if (mounted) {
+        navigator.pop();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Pago registrado correctamente'),
+            duration: Duration(seconds: 2),
           ),
-          duration: errorNotificaciones == null
-              ? const Duration(seconds: 2)
-              : const Duration(seconds: 4),
-        ),
-      );
+        );
+      }
+      unawaited(_actualizarDatosDespuesDelPago(provider, messenger));
     } on Object catch (error) {
       if (!mounted) return;
-      setState(
-        () => _error = error
+      setState(() {
+        _guardando = false;
+        _error = error
             .toString()
             .replaceFirst('ArgumentError: ', '')
             .replaceFirst('StateError: ', '')
-            .replaceFirst('DatabaseException(', ''),
+            .replaceFirst('DatabaseException(', '');
+      });
+    }
+  }
+
+  Future<void> _actualizarDatosDespuesDelPago(
+    GotaProvider provider,
+    ScaffoldMessengerState messenger,
+  ) async {
+    try {
+      await provider.cargarDatos(mostrarCarga: false);
+      final errorCarga = provider.errorCarga;
+      if (errorCarga != null) {
+        if (messenger.mounted) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'El pago se guardó, pero no se pudo actualizar la información: '
+                '$errorCarga',
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+      await NotificacionService.instance.sincronizarConDatos(provider);
+    } on Object catch (error, stackTrace) {
+      debugPrint(
+        'GotaControl: error actualizando datos tras pago: $error\n$stackTrace',
       );
+      if (messenger.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              'El pago se guardó, pero no se pudieron actualizar las '
+              'notificaciones: $error',
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 }

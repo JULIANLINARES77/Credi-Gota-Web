@@ -35,6 +35,10 @@ class _ClientesScreenState extends State<ClientesScreen> {
   @override
   Widget build(BuildContext context) {
     final demo = context.watch<GotaProvider>();
+    final prestamoIdsEnMora = demo.moras
+        .map((mora) => mora.prestamo.id)
+        .whereType<int>()
+        .toSet();
     final clientes = demo.clientes.where((cliente) {
       if (!cliente.activo) return false;
       final id = cliente.id;
@@ -49,7 +53,9 @@ class _ClientesScreenState extends State<ClientesScreen> {
 
       final prestamos = demo.prestamosDeCliente(id);
       return switch (_filtro) {
-        'En mora' => prestamos.any((prestamo) => prestamo.estado == 'MORA'),
+        'En mora' => prestamos.any(
+          (prestamo) => prestamoIdsEnMora.contains(prestamo.id),
+        ),
         'Pagados' =>
           prestamos.isNotEmpty &&
               prestamos.every((prestamo) => prestamo.estado == 'PAGADO'),
@@ -167,6 +173,14 @@ class _ClientesScreenState extends State<ClientesScreen> {
       0.0,
       (saldo, prestamo) => saldo + prestamo.saldoPendiente,
     );
+    final prestamosEnMora = demo.moras
+        .where((mora) => mora.cliente.id == clienteId)
+        .toList();
+    final diasAtraso = prestamosEnMora.isEmpty
+        ? null
+        : prestamosEnMora
+              .map((mora) => mora.diasAtraso)
+              .reduce((a, b) => a > b ? a : b);
     final cuotasPendientes =
         prestamosActivos
             .where((prestamo) => prestamo.id != null)
@@ -175,7 +189,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
             .toList()
           ..sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
     final cuotaSiguiente = cuotasPendientes.firstOrNull;
-    final estado = prestamosActivos.any((prestamo) => prestamo.estado == 'MORA')
+    final estado = prestamosEnMora.isNotEmpty
         ? 'MORA'
         : prestamosActivos.isNotEmpty
         ? 'ACTIVO'
@@ -187,6 +201,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
       cliente: cliente,
       saldoPendiente: saldoPendiente,
       estado: estado,
+      diasAtraso: diasAtraso,
       proximoPago: cuotaSiguiente?.fechaVencimiento,
       cantidadPrestamosActivos: prestamosActivos.length,
       onTap: () => _abrirPrestamosCliente(clienteId),
