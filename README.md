@@ -128,12 +128,14 @@ mensual, reportes, formularios y Google Maps. Antes de generar una release:
 ```powershell
 flutter analyze
 flutter test
-flutter build apk --release --target-platform android-arm64
+flutter build apk --release --target-platform android-arm64 `
+  --obfuscate --split-debug-info=build\symbols
 ```
 
 La base local usa SQLite version 7 y los respaldos se validan antes de
 restaurarse. No se deben borrar respaldos del dispositivo como parte de una
-compilacion o instalacion.
+compilacion o instalacion. La APK final se genera ofuscada; `build/symbols`
+debe conservarse de forma privada para interpretar errores de produccion.
 
 ## Docker
 
