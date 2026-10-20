@@ -12,6 +12,11 @@ class Prestamo {
     required this.valorCuota,
     required this.frecuencia,
     this.diasPersonalizados,
+    this.diasCorridos = false,
+    this.diasGraciaMora = 3,
+    this.tipoRecargoMora = 'PORCENTAJE',
+    this.valorRecargoMora = 10,
+    this.recargoAcumulable = false,
     required this.fechaInicio,
     required this.fechaFinEstimada,
     this.estado = 'ACTIVO',
@@ -30,6 +35,11 @@ class Prestamo {
   final double valorCuota;
   final String frecuencia;
   final String? diasPersonalizados;
+  final bool diasCorridos;
+  final int diasGraciaMora;
+  final String tipoRecargoMora;
+  final double valorRecargoMora;
+  final bool recargoAcumulable;
   final DateTime fechaInicio;
   final DateTime fechaFinEstimada;
   final String estado;
@@ -48,6 +58,11 @@ class Prestamo {
     DbConstants.prestamoValorCuota: valorCuota,
     DbConstants.prestamoFrecuencia: frecuencia,
     DbConstants.prestamoDiasPersonalizados: diasPersonalizados,
+    DbConstants.prestamoDiasCorridos: diasCorridos ? 1 : 0,
+    DbConstants.prestamoDiasGraciaMora: diasGraciaMora,
+    DbConstants.prestamoTipoRecargoMora: tipoRecargoMora,
+    DbConstants.prestamoValorRecargoMora: valorRecargoMora,
+    DbConstants.prestamoRecargoAcumulable: recargoAcumulable ? 1 : 0,
     DbConstants.prestamoFechaInicio: fechaInicio.toIso8601String(),
     DbConstants.prestamoFechaFinEstimada: fechaFinEstimada.toIso8601String(),
     DbConstants.prestamoEstado: estado,
@@ -69,6 +84,17 @@ class Prestamo {
     valorCuota: (map[DbConstants.prestamoValorCuota] as num).toDouble(),
     frecuencia: map[DbConstants.prestamoFrecuencia] as String,
     diasPersonalizados: map[DbConstants.prestamoDiasPersonalizados] as String?,
+    diasCorridos:
+        ((map[DbConstants.prestamoDiasCorridos] as num?)?.toInt() ?? 0) != 0,
+    diasGraciaMora:
+        (map[DbConstants.prestamoDiasGraciaMora] as num?)?.toInt() ?? 3,
+    tipoRecargoMora:
+        map[DbConstants.prestamoTipoRecargoMora] as String? ?? 'PORCENTAJE',
+    valorRecargoMora:
+        (map[DbConstants.prestamoValorRecargoMora] as num?)?.toDouble() ?? 10,
+    recargoAcumulable:
+        ((map[DbConstants.prestamoRecargoAcumulable] as num?)?.toInt() ?? 0) !=
+        0,
     fechaInicio: DateTime.parse(map[DbConstants.prestamoFechaInicio] as String),
     fechaFinEstimada: DateTime.parse(
       map[DbConstants.prestamoFechaFinEstimada] as String,
@@ -91,6 +117,11 @@ class Prestamo {
     double? valorCuota,
     String? frecuencia,
     String? diasPersonalizados,
+    bool? diasCorridos,
+    int? diasGraciaMora,
+    String? tipoRecargoMora,
+    double? valorRecargoMora,
+    bool? recargoAcumulable,
     DateTime? fechaInicio,
     DateTime? fechaFinEstimada,
     String? estado,
@@ -108,6 +139,11 @@ class Prestamo {
     valorCuota: valorCuota ?? this.valorCuota,
     frecuencia: frecuencia ?? this.frecuencia,
     diasPersonalizados: diasPersonalizados ?? this.diasPersonalizados,
+    diasCorridos: diasCorridos ?? this.diasCorridos,
+    diasGraciaMora: diasGraciaMora ?? this.diasGraciaMora,
+    tipoRecargoMora: tipoRecargoMora ?? this.tipoRecargoMora,
+    valorRecargoMora: valorRecargoMora ?? this.valorRecargoMora,
+    recargoAcumulable: recargoAcumulable ?? this.recargoAcumulable,
     fechaInicio: fechaInicio ?? this.fechaInicio,
     fechaFinEstimada: fechaFinEstimada ?? this.fechaFinEstimada,
     estado: estado ?? this.estado,

@@ -1,11 +1,29 @@
 # GotaControl
 
-Aplicacion Flutter para gestion local de prestamos en Android.
+Aplicacion Flutter para gestion local de prestamos en Android, orientada a
+operaciones de credito gota a gota y trabajo sin conexion.
 
 ## Dependencias
 
 Requiere Flutter 3.44.8 y Dart 3.12.2. Instalar los paquetes con `flutter pub get`.
 La lista directa y los comandos estan en [DEPENDENCIAS.txt](DEPENDENCIAS.txt).
+
+## Funcionalidades actuales
+
+- Clientes con nombre, telefono y cedula numericos, direccion opcional,
+  edicion y busqueda de la direccion en Google Maps.
+- Prestamos diarios, semanales, quincenales, mensuales, lunes-miercoles-
+  viernes y frecuencias personalizadas.
+- Fechas retroactivas, dias corridos o ajuste al siguiente dia habil,
+  festivos colombianos y cuotas sin decimales fraccionarios.
+- Pagos completos y parciales, mora configurable por frecuencia, dias de
+  gracia, porcentaje o monto fijo y recargo acumulable.
+- Reportes diarios, semanales, mensuales, estado de cuenta y estadisticas de
+  capital e interes, con visor PDF ampliable.
+- Notificaciones locales de cuotas por vencer y de cuotas que ya superaron los
+  dias de gracia de mora, ademas de resumen diario configurable.
+- PIN local con bloqueo despues de 90 segundos en segundo plano, respaldos
+  automaticos y manuales, restauracion e importacion desde Documentos.
 
 ## Plataformas
 
@@ -19,7 +37,7 @@ Para probar la interfaz web sin persistencia, aún no hay un modo mock separado.
 ## Respaldos locales y recuperación
 
 En Android 10 o posterior, GotaControl crea automáticamente
-`Descargas/GotaControl` en el primer inicio y guarda allí las copias completas de
+`Documentos/GotaControl` en el primer inicio y guarda allí las copias completas de
 SQLite. Esa carpeta está fuera del almacenamiento privado de la app y permanece
 al desinstalarla. Android elimina el permiso privado de acceso al reinstalar,
 por lo que, si la base local no existe o está vacía, la app solicita elegir con
@@ -57,8 +75,10 @@ opcional (250), mora entre 0 y 100 % y días de gracia entre 0 y 365.
 ## Notificaciones locales
 
 GotaControl programa recordatorios locales para las cuotas pendientes: el día
-del vencimiento y, si está activada la opción **Alertas de mora**, tres días
-después. También permite programar un resumen diario desde Ajustes. Al crear un
+del vencimiento y, si está activada la opción **Alertas de mora**, cuando cada
+préstamo supera sus propios días de gracia configurados. Las cuotas que ya
+están vencidas generan además una alerta inmediata al sincronizar la app.
+También permite programar un resumen diario desde Ajustes. Al crear un
 préstamo, registrar un pago o iniciar la app, los recordatorios se sincronizan
 con las cuotas y el saldo que aún falta pagar. Para respetar el límite de
 alarmas de Android, se mantienen hasta 300 alertas de cuotas próximas, además
@@ -96,7 +116,24 @@ El APK queda en `build/app/outputs/flutter-apk/app-release.apk`. Si no existe
 como una versión de producción. El identificador de aplicación es
 `com.ingeniumcode.gotacontrol`; configúralo de forma definitiva antes de publicar.
 Conserva `build/symbols` para poder diagnosticar errores de esta compilación
-ofuscada.
+ofuscada. El procedimiento completo, incluyendo ADB, firma, compatibilidad y
+errores frecuentes, está en [GUIA_APK.txt](GUIA_APK.txt).
+
+## Calidad y pruebas
+
+Las pruebas cubren persistencia SQLite, migraciones, clientes, pagos parciales
+y retroactivos, calculo financiero, mora con reglas por frecuencia, calendario
+mensual, reportes, formularios y Google Maps. Antes de generar una release:
+
+```powershell
+flutter analyze
+flutter test
+flutter build apk --release --target-platform android-arm64
+```
+
+La base local usa SQLite version 7 y los respaldos se validan antes de
+restaurarse. No se deben borrar respaldos del dispositivo como parte de una
+compilacion o instalacion.
 
 ## Docker
 

@@ -12,6 +12,7 @@ class Cuota {
     this.estado = 'PENDIENTE',
     this.diasAtraso = 0,
     this.esPenalizacion = false,
+    this.montoPenalizacion = 0,
   });
 
   final int? id;
@@ -24,6 +25,7 @@ class Cuota {
   final String estado;
   final int diasAtraso;
   final bool esPenalizacion;
+  final double montoPenalizacion;
 
   Map<String, Object?> toMap() => {
     DbConstants.columnId: id,
@@ -36,6 +38,7 @@ class Cuota {
     DbConstants.cuotaEstado: estado,
     DbConstants.cuotaDiasAtraso: diasAtraso,
     DbConstants.cuotaEsPenalizacion: esPenalizacion ? 1 : 0,
+    DbConstants.cuotaMontoPenalizacion: montoPenalizacion,
   };
 
   factory Cuota.fromMap(Map<String, Object?> map) => Cuota(
@@ -54,6 +57,8 @@ class Cuota {
     diasAtraso: (map[DbConstants.cuotaDiasAtraso] as num?)?.toInt() ?? 0,
     esPenalizacion:
         ((map[DbConstants.cuotaEsPenalizacion] as num?)?.toInt() ?? 0) != 0,
+    montoPenalizacion:
+        (map[DbConstants.cuotaMontoPenalizacion] as num?)?.toDouble() ?? 0,
   );
 
   Cuota copyWith({
@@ -67,6 +72,7 @@ class Cuota {
     String? estado,
     int? diasAtraso,
     bool? esPenalizacion,
+    double? montoPenalizacion,
   }) => Cuota(
     id: id ?? this.id,
     prestamoId: prestamoId ?? this.prestamoId,
@@ -78,5 +84,6 @@ class Cuota {
     estado: estado ?? this.estado,
     diasAtraso: diasAtraso ?? this.diasAtraso,
     esPenalizacion: esPenalizacion ?? this.esPenalizacion,
+    montoPenalizacion: montoPenalizacion ?? this.montoPenalizacion,
   );
 }

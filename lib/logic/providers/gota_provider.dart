@@ -176,38 +176,85 @@ class GotaProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> agregarCliente({
+  Future<Cliente> agregarCliente({
     required String nombre,
     required String telefono,
     String? cedula,
+    String? direccion,
   }) async {
     final nombreLimpio = nombre.trim();
     final telefonoLimpio = telefono.trim();
     final cedulaLimpia = cedula?.trim();
+    final direccionLimpia = direccion?.trim();
 
     if (nombreLimpio.isEmpty || telefonoLimpio.isEmpty) {
       throw ArgumentError('Nombre y teléfono son obligatorios.');
     }
 
+    final nuevoCliente = Cliente(
+      nombre: nombreLimpio,
+      telefono: telefonoLimpio,
+      cedula: _textoOpcional(cedulaLimpia),
+      direccion: _textoOpcional(direccionLimpia),
+      fechaRegistro: _reloj(),
+    );
+
     try {
-      await _databaseHelper.insertarCliente(
-        Cliente(
-          nombre: nombreLimpio,
-          telefono: telefonoLimpio,
-          cedula: (cedulaLimpia == null || cedulaLimpia.isEmpty)
-              ? null
-              : cedulaLimpia,
-          fechaRegistro: _reloj(),
-        ),
-      );
+      final clienteId = await _databaseHelper.insertarCliente(nuevoCliente);
+      await cargarDatos();
+      return nuevoCliente.copyWith(id: clienteId);
     } on Object catch (error, stackTrace) {
       debugPrint('GotaControl: error al insertar cliente: $error\n$stackTrace');
       errorCarga = _mensajeAmigable('No se pudo guardar el cliente', error);
       _safeNotify();
       rethrow;
     }
+  }
 
-    await cargarDatos();
+  Future<Cliente> actualizarCliente({
+    required Cliente cliente,
+    required String nombre,
+    required String telefono,
+    String? cedula,
+    String? direccion,
+  }) async {
+    if (cliente.id == null) {
+      throw ArgumentError('El cliente debe tener un identificador.');
+    }
+    final nombreLimpio = nombre.trim();
+    final telefonoLimpio = telefono.trim();
+    if (nombreLimpio.isEmpty || telefonoLimpio.isEmpty) {
+      throw ArgumentError('Nombre y teléfono son obligatorios.');
+    }
+
+    final clienteActualizado = Cliente(
+      id: cliente.id,
+      nombre: nombreLimpio,
+      telefono: telefonoLimpio,
+      cedula: _textoOpcional(cedula),
+      direccion: _textoOpcional(direccion),
+      fotoPath: cliente.fotoPath,
+      notas: cliente.notas,
+      fechaRegistro: cliente.fechaRegistro,
+      activo: cliente.activo,
+    );
+    try {
+      final filasActualizadas = await _databaseHelper.actualizarCliente(
+        clienteActualizado,
+      );
+      if (filasActualizadas != 1) {
+        throw StateError('No se encontró el cliente que deseas actualizar.');
+      }
+      await cargarDatos();
+      return clienteActualizado;
+    } on Object catch (error, stackTrace) {
+      debugPrint(
+        'GotaControl: error al actualizar cliente: $error\n$stackTrace',
+      );
+      errorCarga = _mensajeAmigable('No se pudo actualizar el cliente', error);
+      _safeNotify();
+      rethrow;
+    }
   }
 
   Future<void> eliminarCliente(int id) async {
@@ -224,6 +271,11 @@ class GotaProvider extends ChangeNotifier {
 
   Future<bool> clienteEstaPazYSalvo(int clienteId) =>
       _databaseHelper.clienteEstaPazYSalvo(clienteId);
+
+  static String? _textoOpcional(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
 
   Future<void> configurarPin(String pin) async {
     final hash = await _pinHashService.hash(pin);
@@ -295,6 +347,22 @@ class GotaProvider extends ChangeNotifier {
       DbConstants.configuracionDireccionNegocio,
       DbConstants.configuracionPorcentajeMora,
       DbConstants.configuracionDiasGraciaMora,
+      DbConstants.configuracionMoraDiariaDiasGracia,
+      DbConstants.configuracionMoraDiariaTipoRecargo,
+      DbConstants.configuracionMoraDiariaValorRecargo,
+      DbConstants.configuracionMoraDiariaRecargoAcumulable,
+      DbConstants.configuracionMoraSemanalDiasGracia,
+      DbConstants.configuracionMoraSemanalTipoRecargo,
+      DbConstants.configuracionMoraSemanalValorRecargo,
+      DbConstants.configuracionMoraSemanalRecargoAcumulable,
+      DbConstants.configuracionMoraQuincenalDiasGracia,
+      DbConstants.configuracionMoraQuincenalTipoRecargo,
+      DbConstants.configuracionMoraQuincenalValorRecargo,
+      DbConstants.configuracionMoraQuincenalRecargoAcumulable,
+      DbConstants.configuracionMoraMensualDiasGracia,
+      DbConstants.configuracionMoraMensualTipoRecargo,
+      DbConstants.configuracionMoraMensualValorRecargo,
+      DbConstants.configuracionMoraMensualRecargoAcumulable,
     };
     if (cambios.keys.any(camposValidados.contains)) {
       final configuracionActual =
@@ -314,7 +382,9 @@ class GotaProvider extends ChangeNotifier {
     required int numCuotas,
     required String frecuencia,
     List<int>? diasPersonalizados,
-    bool saltarFestivos = false,
+    DateTime? fechaInicio,
+    bool diasCorridos = true,
+    bool? saltarFestivos,
   }) async {
     final cliente = clientePorId(clienteId);
     if (cliente == null || !cliente.activo) {
@@ -326,13 +396,19 @@ class GotaProvider extends ChangeNotifier {
       porcentajeInteres: porcentajeInteres,
       numCuotas: numCuotas,
     );
-    final fechaInicio = _soloFecha(_reloj());
+    final configuracion =
+        _configuracion ?? await _databaseHelper.obtenerConfiguracion() ?? {};
+    final mora = _reglaMoraFrecuencia(frecuencia, configuracion);
+    final fechaInicioEfectiva = _soloFecha(fechaInicio ?? _reloj());
+    final diasCorridosEfectivos = saltarFestivos == null
+        ? diasCorridos
+        : !saltarFestivos;
     final fechas = _calculadora.generarFechasPago(
-      fechaInicio: fechaInicio,
+      fechaInicio: fechaInicioEfectiva,
       numCuotas: numCuotas,
       frecuencia: frecuencia,
       diasPersonalizados: diasPersonalizados,
-      saltarFestivos: saltarFestivos,
+      diasCorridos: diasCorridosEfectivos,
     );
     final prestamo = Prestamo(
       clienteId: clienteId,
@@ -344,7 +420,12 @@ class GotaProvider extends ChangeNotifier {
       valorCuota: calculo.valorCuota,
       frecuencia: frecuencia,
       diasPersonalizados: diasPersonalizados?.join(','),
-      fechaInicio: fechaInicio,
+      diasCorridos: diasCorridosEfectivos,
+      diasGraciaMora: mora.diasGracia,
+      tipoRecargoMora: mora.tipoRecargo,
+      valorRecargoMora: mora.valorRecargo,
+      recargoAcumulable: mora.acumulable,
+      fechaInicio: fechaInicioEfectiva,
       fechaFinEstimada: fechas.last,
       estado: 'ACTIVO',
       saldoPendiente: calculo.montoTotalPagar,
@@ -376,6 +457,138 @@ class GotaProvider extends ChangeNotifier {
     }
   }
 
+  _ReglaMora _reglaMoraFrecuencia(
+    String frecuencia,
+    Map<String, Object?> configuracion,
+  ) {
+    final prefijo = switch (frecuencia.trim().toUpperCase()) {
+      CalculadoraService.frecuenciaDiaria => 'diaria',
+      CalculadoraService.frecuenciaSemanal => 'semanal',
+      CalculadoraService.frecuenciaQuincenal => 'quincenal',
+      CalculadoraService.frecuenciaMensual => 'mensual',
+      CalculadoraService.frecuenciaLunesMiercolesViernes ||
+      CalculadoraService.frecuenciaPersonalizada => 'diaria',
+      final otra => throw ArgumentError.value(
+        otra,
+        'frecuencia',
+        'Frecuencia de mora no válida.',
+      ),
+    };
+    final frecuenciaKeys = switch (prefijo) {
+      'diaria' => (
+        DbConstants.configuracionMoraDiariaDiasGracia,
+        DbConstants.configuracionMoraDiariaTipoRecargo,
+        DbConstants.configuracionMoraDiariaValorRecargo,
+        DbConstants.configuracionMoraDiariaRecargoAcumulable,
+      ),
+      'semanal' => (
+        DbConstants.configuracionMoraSemanalDiasGracia,
+        DbConstants.configuracionMoraSemanalTipoRecargo,
+        DbConstants.configuracionMoraSemanalValorRecargo,
+        DbConstants.configuracionMoraSemanalRecargoAcumulable,
+      ),
+      'quincenal' => (
+        DbConstants.configuracionMoraQuincenalDiasGracia,
+        DbConstants.configuracionMoraQuincenalTipoRecargo,
+        DbConstants.configuracionMoraQuincenalValorRecargo,
+        DbConstants.configuracionMoraQuincenalRecargoAcumulable,
+      ),
+      _ => (
+        DbConstants.configuracionMoraMensualDiasGracia,
+        DbConstants.configuracionMoraMensualTipoRecargo,
+        DbConstants.configuracionMoraMensualValorRecargo,
+        DbConstants.configuracionMoraMensualRecargoAcumulable,
+      ),
+    };
+    final regla = _ReglaMora(
+      diasGracia:
+          (configuracion[frecuenciaKeys.$1] as num?)?.toInt() ??
+          (configuracion[DbConstants.configuracionDiasGraciaMora] as num?)
+              ?.toInt() ??
+          3,
+      tipoRecargo: configuracion[frecuenciaKeys.$2] as String? ?? 'PORCENTAJE',
+      valorRecargo:
+          (configuracion[frecuenciaKeys.$3] as num?)?.toDouble() ??
+          (configuracion[DbConstants.configuracionPorcentajeMora] as num?)
+              ?.toDouble() ??
+          10,
+      acumulable:
+          ((configuracion[frecuenciaKeys.$4] as num?)?.toInt() ?? 0) != 0,
+    );
+    if (regla.diasGracia < 0 ||
+        !regla.valorRecargo.isFinite ||
+        regla.valorRecargo < 0 ||
+        !const {'PORCENTAJE', 'MONTO_FIJO'}.contains(regla.tipoRecargo)) {
+      throw StateError('La regla de mora configurada no es válida.');
+    }
+    return regla;
+  }
+
+  Future<double> aplicarMoraCuota({
+    required int prestamoId,
+    required int cuotaId,
+    DateTime? fechaReferencia,
+  }) async {
+    final prestamo = _prestamoPorId(prestamoId);
+    Cuota? cuota;
+    for (final item in _cuotasPorPrestamo[prestamoId] ?? const <Cuota>[]) {
+      if (item.id == cuotaId) {
+        cuota = item;
+        break;
+      }
+    }
+    if (prestamo == null || cuota == null) {
+      throw StateError('No se encontró el préstamo o la cuota.');
+    }
+
+    final servicio = MoraService(
+      databaseHelper: _databaseHelper,
+      reloj: _reloj,
+    );
+    final aplicado = await servicio.aplicarMoraCuota(
+      prestamo: prestamo,
+      cuota: cuota,
+      fechaReferencia: fechaReferencia,
+    );
+    if (aplicado > 0) {
+      final cuotas = _cuotasPorPrestamo[prestamoId]!;
+      final indiceCuota = cuotas.indexWhere((item) => item.id == cuotaId);
+      if (indiceCuota >= 0) {
+        _cuotasPorPrestamo[prestamoId] = [
+          ...cuotas.take(indiceCuota),
+          cuota.copyWith(
+            montoCuota: cuota.montoCuota + aplicado,
+            montoPenalizacion: cuota.montoPenalizacion + aplicado,
+          ),
+          ...cuotas.skip(indiceCuota + 1),
+        ];
+      }
+      final indicePrestamo = _prestamos.indexWhere(
+        (item) => item.id == prestamoId,
+      );
+      if (indicePrestamo >= 0) {
+        _prestamos[indicePrestamo] = prestamo.copyWith(
+          montoTotalPagar: prestamo.montoTotalPagar + aplicado,
+          saldoPendiente: prestamo.saldoPendiente + aplicado,
+          estado: 'MORA',
+        );
+      }
+      _moras = _construirMoras(
+        prestamos: _prestamos,
+        clientesPorId: {
+          for (final cliente in _clientes)
+            if (cliente.id != null) cliente.id!: cliente,
+        },
+        cuotasPorPrestamo: _cuotasPorPrestamo,
+      );
+      _safeNotify();
+    }
+    return aplicado;
+  }
+
+  Future<Map<String, Object?>> obtenerEstadisticasPrestamos() =>
+      _databaseHelper.obtenerEstadisticasPrestamos();
+
   Future<Pago> registrarPago({
     required int prestamoId,
     required int cuotaId,
@@ -388,6 +601,7 @@ class GotaProvider extends ChangeNotifier {
     if (prestamo == null || prestamo.id == null) {
       throw StateError('No se encontró el préstamo.');
     }
+
     final cliente = clientePorId(prestamo.clienteId);
     if (cliente == null || cliente.id == null) {
       throw StateError('No se encontró el cliente del préstamo.');
@@ -576,4 +790,18 @@ class GotaProvider extends ChangeNotifier {
     }
     return '$prefijo: $texto';
   }
+}
+
+class _ReglaMora {
+  const _ReglaMora({
+    required this.diasGracia,
+    required this.tipoRecargo,
+    required this.valorRecargo,
+    required this.acumulable,
+  });
+
+  final int diasGracia;
+  final String tipoRecargo;
+  final double valorRecargo;
+  final bool acumulable;
 }

@@ -34,6 +34,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     'mensual': ('Reporte mensual', Icons.bar_chart_outlined),
     'mora': ('Reporte de mora', Icons.warning_amber_outlined),
     'cliente': ('Estado de cuenta', Icons.person_search_outlined),
+    'estadisticas': ('Estadísticas del Negocio', Icons.insights_outlined),
   };
 
   @override
@@ -97,7 +98,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     _bytesReporte = null;
                   }),
                 )
-              else
+              else if (_tipo != 'estadisticas')
                 OutlinedButton.icon(
                   onPressed: _seleccionarFecha,
                   icon: const Icon(Icons.calendar_month_outlined),
@@ -194,8 +195,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 ),
               ] else
                 FilledButton.icon(
-                  onPressed: _generando ||
-                          (_tipo == 'cliente' && cliente == null)
+                  onPressed:
+                      _generando || (_tipo == 'cliente' && cliente == null)
                       ? null
                       : () => _crearVistaPrevia(demo, cliente),
                   icon: const Icon(Icons.picture_as_pdf_outlined),
@@ -248,10 +249,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  Future<void> _crearVistaPrevia(
-    GotaProvider demo,
-    Cliente? cliente,
-  ) async {
+  Future<void> _crearVistaPrevia(GotaProvider demo, Cliente? cliente) async {
     setState(() => _generando = true);
     try {
       final bytes = await _generarBytes(demo, cliente);
@@ -282,9 +280,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   void _mostrarError(String mensaje) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensaje)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(mensaje)));
   }
 
   Future<Uint8List> _generarBytes(GotaProvider demo, Cliente? cliente) =>
@@ -293,6 +291,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
         'semanal' => PdfGenerator.reporteSemanal(demo, _fecha),
         'mensual' => PdfGenerator.reporteMensual(demo, _fecha),
         'mora' => PdfGenerator.reporteMora(demo, _fecha),
+        'estadisticas' => PdfGenerator.reporteEstadisticas(demo),
         'cliente' when cliente != null => PdfGenerator.estadoCuenta(
           demo,
           cliente,
@@ -452,6 +451,12 @@ class _ResumenPreview extends StatelessWidget {
             interesTotal: prestamo.montoInteres,
           );
     });
+    final mesesConPrestamos = demo.prestamos
+        .map(
+          (prestamo) =>
+              '${prestamo.fechaInicio.year}-${prestamo.fechaInicio.month}',
+        )
+        .toSet();
     final filas = switch (tipo) {
       'diario' => [
         ('Recaudo', GotaDateUtils.formatearMoneda(recaudoPeriodo)),
@@ -485,6 +490,27 @@ class _ResumenPreview extends StatelessWidget {
             ),
           ),
         ),
+      ],
+      'estadisticas' => [
+        (
+          'Capital activo',
+          GotaDateUtils.formatearMoneda(
+            demo.prestamosActivos.fold(
+              0.0,
+              (total, prestamo) => total + prestamo.montoCapital,
+            ),
+          ),
+        ),
+        (
+          'Interés esperado activo',
+          GotaDateUtils.formatearMoneda(
+            demo.prestamosActivos.fold(
+              0.0,
+              (total, prestamo) => total + prestamo.montoInteres,
+            ),
+          ),
+        ),
+        ('Meses con préstamos', '${mesesConPrestamos.length}'),
       ],
       _ => [
         ('Cliente', cliente?.nombre ?? 'Selecciona un cliente'),

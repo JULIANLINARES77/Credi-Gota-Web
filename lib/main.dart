@@ -59,35 +59,20 @@ void main() {
         }
       }
       await provider.cargarDatos();
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        try {
-          final estadoRespaldo = await LocalBackupService.instance.status();
-          if (falloRecuperacionAutomatica ||
-              (estadoRespaldo.lastError != null &&
-                  estadoRespaldo.lastSuccess == null)) {
-            provider.mostrarAvisoRespaldoInicio(
-              'No se pudo validar la copia más reciente. No se programó una '
-              'copia nueva para proteger los respaldos existentes. Revisa '
-              'Ajustes → Respaldo e importa una copia válida.',
-            );
-          } else {
-            final frecuencia = BackupFrequency.fromValue(
-              provider.configuracion?[DbConstants
-                  .configuracionFrecuenciaRespaldo],
-            );
-            await LocalBackupService.instance.configureSchedule(frecuencia);
-          }
-        } on Object catch (error, stackTrace) {
-          debugPrint('GotaControl: no se pudo programar el respaldo: $error');
-          debugPrintStack(stackTrace: stackTrace);
-        }
-      }
       runApp(
         ChangeNotifierProvider.value(
           value: provider,
           child: const GotaControlApp(),
         ),
       );
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        unawaited(
+          _configurarRespaldoEnSegundoPlano(
+            provider,
+            falloRecuperacionAutomatica: falloRecuperacionAutomatica,
+          ),
+        );
+      }
 
       if (!kIsWeb) {
         try {
@@ -105,6 +90,32 @@ void main() {
       debugPrintStack(stackTrace: stack);
     },
   );
+}
+
+Future<void> _configurarRespaldoEnSegundoPlano(
+  GotaProvider provider, {
+  required bool falloRecuperacionAutomatica,
+}) async {
+  try {
+    final estadoRespaldo = await LocalBackupService.instance.status();
+    if (falloRecuperacionAutomatica ||
+        (estadoRespaldo.lastError != null &&
+            estadoRespaldo.lastSuccess == null)) {
+      provider.mostrarAvisoRespaldoInicio(
+        'No se pudo validar la copia más reciente. No se programó una '
+        'copia nueva para proteger los respaldos existentes. Revisa '
+        'Ajustes → Respaldo e importa una copia válida.',
+      );
+      return;
+    }
+    final frecuencia = BackupFrequency.fromValue(
+      provider.configuracion?[DbConstants.configuracionFrecuenciaRespaldo],
+    );
+    await LocalBackupService.instance.configureSchedule(frecuencia);
+  } on Object catch (error, stackTrace) {
+    debugPrint('GotaControl: no se pudo programar el respaldo: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
 }
 
 class GotaControlApp extends StatelessWidget {

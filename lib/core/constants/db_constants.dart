@@ -2,7 +2,7 @@ class DbConstants {
   DbConstants._();
 
   static const databaseName = 'gota_control.db';
-  static const databaseVersion = 4;
+  static const databaseVersion = 7;
 
   static const tableClientes = 'clientes';
   static const tablePrestamos = 'prestamos';
@@ -30,6 +30,11 @@ class DbConstants {
   static const prestamoValorCuota = 'valor_cuota';
   static const prestamoFrecuencia = 'frecuencia';
   static const prestamoDiasPersonalizados = 'dias_personalizados';
+  static const prestamoDiasCorridos = 'dias_corridos';
+  static const prestamoDiasGraciaMora = 'dias_gracia_mora';
+  static const prestamoTipoRecargoMora = 'tipo_recargo_mora';
+  static const prestamoValorRecargoMora = 'valor_recargo_mora';
+  static const prestamoRecargoAcumulable = 'recargo_acumulable';
   static const prestamoFechaInicio = 'fecha_inicio';
   static const prestamoFechaFinEstimada = 'fecha_fin_estimada';
   static const prestamoEstado = 'estado';
@@ -46,6 +51,7 @@ class DbConstants {
   static const cuotaEstado = 'estado';
   static const cuotaDiasAtraso = 'dias_atraso';
   static const cuotaEsPenalizacion = 'es_penalizacion';
+  static const cuotaMontoPenalizacion = 'monto_penalizacion';
 
   static const pagoCuotaId = 'cuota_id';
   static const pagoPrestamoId = 'prestamo_id';
@@ -61,6 +67,34 @@ class DbConstants {
   static const configuracionMetaDiaria = 'meta_diaria';
   static const configuracionPorcentajeMora = 'porcentaje_mora';
   static const configuracionDiasGraciaMora = 'dias_gracia_mora';
+  static const configuracionMoraDiariaDiasGracia = 'mora_diaria_dias_gracia';
+  static const configuracionMoraDiariaTipoRecargo = 'mora_diaria_tipo_recargo';
+  static const configuracionMoraDiariaValorRecargo =
+      'mora_diaria_valor_recargo';
+  static const configuracionMoraDiariaRecargoAcumulable =
+      'mora_diaria_recargo_acumulable';
+  static const configuracionMoraSemanalDiasGracia = 'mora_semanal_dias_gracia';
+  static const configuracionMoraSemanalTipoRecargo =
+      'mora_semanal_tipo_recargo';
+  static const configuracionMoraSemanalValorRecargo =
+      'mora_semanal_valor_recargo';
+  static const configuracionMoraSemanalRecargoAcumulable =
+      'mora_semanal_recargo_acumulable';
+  static const configuracionMoraQuincenalDiasGracia =
+      'mora_quincenal_dias_gracia';
+  static const configuracionMoraQuincenalTipoRecargo =
+      'mora_quincenal_tipo_recargo';
+  static const configuracionMoraQuincenalValorRecargo =
+      'mora_quincenal_valor_recargo';
+  static const configuracionMoraQuincenalRecargoAcumulable =
+      'mora_quincenal_recargo_acumulable';
+  static const configuracionMoraMensualDiasGracia = 'mora_mensual_dias_gracia';
+  static const configuracionMoraMensualTipoRecargo =
+      'mora_mensual_tipo_recargo';
+  static const configuracionMoraMensualValorRecargo =
+      'mora_mensual_valor_recargo';
+  static const configuracionMoraMensualRecargoAcumulable =
+      'mora_mensual_recargo_acumulable';
   static const configuracionPinSeguridad = 'pin_seguridad';
   static const configuracionPinHash = 'pin_hash';
   static const configuracionPinIntentosFallidos = 'pin_intentos_fallidos';

@@ -16,8 +16,7 @@ class ResultadoCalculoPrestamo {
   final List<double> valoresCuota;
   final double gananciaDiariaPromedio;
 
-  double get valorCuotaMaxima =>
-      valoresCuota.reduce((a, b) => a > b ? a : b);
+  double get valorCuotaMaxima => valoresCuota.reduce((a, b) => a > b ? a : b);
 }
 
 class CalculadoraService {
@@ -26,6 +25,7 @@ class CalculadoraService {
   static const frecuenciaDiaria = 'DIARIA';
   static const frecuenciaSemanal = 'SEMANAL';
   static const frecuenciaQuincenal = 'QUINCENAL';
+  static const frecuenciaMensual = 'MENSUAL';
   static const frecuenciaLunesMiercolesViernes = 'LUN_MIE_VIE';
   static const frecuenciaPersonalizada = 'PERSONALIZADA';
 
@@ -109,13 +109,15 @@ class CalculadoraService {
     required String frecuencia,
     List<int>? diasPersonalizados,
     bool saltarDomingos = false,
-    bool saltarFestivos = false,
+    bool? diasCorridos,
+    bool? saltarFestivos,
   }) => generarFechasPago(
     fechaInicio: fechaInicio,
     numCuotas: numCuotas,
     frecuencia: frecuencia,
     diasPersonalizados: diasPersonalizados,
     saltarDomingos: saltarDomingos,
+    diasCorridos: diasCorridos,
     saltarFestivos: saltarFestivos,
   ).last;
 
@@ -147,7 +149,8 @@ class CalculadoraService {
     required String frecuencia,
     List<int>? diasPersonalizados,
     bool saltarDomingos = false,
-    bool saltarFestivos = false,
+    bool? diasCorridos,
+    bool? saltarFestivos,
   }) {
     if (numCuotas <= 0) {
       throw ArgumentError.value(
@@ -171,6 +174,7 @@ class CalculadoraService {
     if (frecuenciaNormalizada != frecuenciaDiaria &&
         frecuenciaNormalizada != frecuenciaSemanal &&
         frecuenciaNormalizada != frecuenciaQuincenal &&
+        frecuenciaNormalizada != frecuenciaMensual &&
         diasPermitidos == null) {
       throw ArgumentError.value(
         frecuencia,
@@ -181,12 +185,21 @@ class CalculadoraService {
 
     final fechas = <DateTime>[];
     var fechaActual = fechaInicio;
+    final diasCorridosEfectivos =
+        diasCorridos ?? !(saltarDomingos || saltarFestivos == true);
+    final saltarDomingosEfectivo = diasCorridos == null
+        ? saltarDomingos
+        : !diasCorridosEfectivos;
+    final saltarFestivosEfectivo = diasCorridos == null
+        ? saltarFestivos == true
+        : !diasCorridosEfectivos;
 
     switch (frecuenciaNormalizada) {
       case frecuenciaDiaria:
         while (fechas.length < numCuotas) {
           fechaActual = _sumarDiasCalendario(fechaActual, 1);
-          if (saltarDomingos && fechaActual.weekday == DateTime.sunday) {
+          if (saltarDomingosEfectivo &&
+              fechaActual.weekday == DateTime.sunday) {
             continue;
           }
           fechas.add(fechaActual);
@@ -201,6 +214,11 @@ class CalculadoraService {
           fechaActual = _sumarDiasCalendario(fechaActual, 15);
           fechas.add(fechaActual);
         }
+      case frecuenciaMensual:
+        for (var indice = 1; indice <= numCuotas; indice++) {
+          fechaActual = _sumarMesesDesde(fechaInicio, indice);
+          fechas.add(fechaActual);
+        }
       case frecuenciaLunesMiercolesViernes:
       case frecuenciaPersonalizada:
         for (var i = 0; i < numCuotas; i++) {
@@ -209,12 +227,15 @@ class CalculadoraService {
         }
     }
 
-    if (!saltarFestivos) return fechas;
+    if (!saltarFestivosEfectivo) return fechas;
 
     final fechasAjustadas = <DateTime>[];
     for (final fecha in fechas) {
       var fechaAjustada = fecha;
-      while (fechaAjustada.weekday == DateTime.sunday ||
+      while ((diasCorridos == false
+              ? fechaAjustada.weekday == DateTime.saturday ||
+                    fechaAjustada.weekday == DateTime.sunday
+              : fechaAjustada.weekday == DateTime.sunday) ||
           FestivosColombia.esFestivo(fechaAjustada) ||
           (fechasAjustadas.isNotEmpty &&
               !fechaAjustada.isAfter(fechasAjustadas.last))) {
@@ -265,10 +286,41 @@ class CalculadoraService {
         fecha.microsecond,
       );
     }
+
     return DateTime(
       fecha.year,
       fecha.month,
       fecha.day + dias,
+      fecha.hour,
+      fecha.minute,
+      fecha.second,
+      fecha.millisecond,
+      fecha.microsecond,
+    );
+  }
+
+  DateTime _sumarMesesDesde(DateTime fecha, int meses) {
+    final mesAbsoluto = fecha.month - 1 + meses;
+    final anio = fecha.year + mesAbsoluto ~/ 12;
+    final mes = mesAbsoluto % 12 + 1;
+    final ultimoDia = DateTime(anio, mes + 1, 0).day;
+    final dia = fecha.day > ultimoDia ? ultimoDia : fecha.day;
+    if (fecha.isUtc) {
+      return DateTime.utc(
+        anio,
+        mes,
+        dia,
+        fecha.hour,
+        fecha.minute,
+        fecha.second,
+        fecha.millisecond,
+        fecha.microsecond,
+      );
+    }
+    return DateTime(
+      anio,
+      mes,
+      dia,
       fecha.hour,
       fecha.minute,
       fecha.second,
@@ -307,6 +359,6 @@ class CalculadoraService {
         'Debe ser un valor finito no negativo.',
       );
     }
-    return _redondearDosDecimales(montoPagado / totalPagar * baseTotal);
+    return montoPagado / totalPagar * baseTotal;
   }
 }

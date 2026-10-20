@@ -68,6 +68,11 @@ class DatabaseHelper {
         ${DbConstants.prestamoValorCuota} REAL NOT NULL,
         ${DbConstants.prestamoFrecuencia} TEXT NOT NULL,
         ${DbConstants.prestamoDiasPersonalizados} TEXT,
+        ${DbConstants.prestamoDiasCorridos} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.prestamoDiasGraciaMora} INTEGER NOT NULL DEFAULT 3,
+        ${DbConstants.prestamoTipoRecargoMora} TEXT NOT NULL DEFAULT 'PORCENTAJE',
+        ${DbConstants.prestamoValorRecargoMora} REAL NOT NULL DEFAULT 10,
+        ${DbConstants.prestamoRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
         ${DbConstants.prestamoFechaInicio} TEXT NOT NULL,
         ${DbConstants.prestamoFechaFinEstimada} TEXT NOT NULL,
         ${DbConstants.prestamoEstado} TEXT NOT NULL,
@@ -91,6 +96,7 @@ class DatabaseHelper {
         ${DbConstants.cuotaEstado} TEXT NOT NULL,
         ${DbConstants.cuotaDiasAtraso} INTEGER NOT NULL DEFAULT 0,
         ${DbConstants.cuotaEsPenalizacion} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.cuotaMontoPenalizacion} REAL NOT NULL DEFAULT 0,
         UNIQUE (${DbConstants.cuotaPrestamoId}, ${DbConstants.cuotaNumero}),
         FOREIGN KEY (${DbConstants.cuotaPrestamoId})
           REFERENCES ${DbConstants.tablePrestamos} (${DbConstants.columnId})
@@ -127,6 +133,22 @@ class DatabaseHelper {
         ${DbConstants.configuracionMetaDiaria} REAL,
         ${DbConstants.configuracionPorcentajeMora} REAL NOT NULL DEFAULT 10,
         ${DbConstants.configuracionDiasGraciaMora} INTEGER NOT NULL DEFAULT 3,
+        ${DbConstants.configuracionMoraDiariaDiasGracia} INTEGER NOT NULL DEFAULT 3,
+        ${DbConstants.configuracionMoraDiariaTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
+        ${DbConstants.configuracionMoraDiariaValorRecargo} REAL NOT NULL DEFAULT 10,
+        ${DbConstants.configuracionMoraDiariaRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraSemanalDiasGracia} INTEGER NOT NULL DEFAULT 3,
+        ${DbConstants.configuracionMoraSemanalTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
+        ${DbConstants.configuracionMoraSemanalValorRecargo} REAL NOT NULL DEFAULT 10,
+        ${DbConstants.configuracionMoraSemanalRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraQuincenalDiasGracia} INTEGER NOT NULL DEFAULT 3,
+        ${DbConstants.configuracionMoraQuincenalTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
+        ${DbConstants.configuracionMoraQuincenalValorRecargo} REAL NOT NULL DEFAULT 10,
+        ${DbConstants.configuracionMoraQuincenalRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraMensualDiasGracia} INTEGER NOT NULL DEFAULT 3,
+        ${DbConstants.configuracionMoraMensualTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
+        ${DbConstants.configuracionMoraMensualValorRecargo} REAL NOT NULL DEFAULT 10,
+        ${DbConstants.configuracionMoraMensualRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
         ${DbConstants.configuracionPinSeguridad} TEXT,
         ${DbConstants.configuracionPinHash} TEXT,
         ${DbConstants.configuracionPinIntentosFallidos} INTEGER NOT NULL DEFAULT 0,
@@ -163,6 +185,22 @@ class DatabaseHelper {
       DbConstants.configuracionNombreNegocio: 'GotaControl',
       DbConstants.configuracionPorcentajeMora: 10.0,
       DbConstants.configuracionDiasGraciaMora: 3,
+      DbConstants.configuracionMoraDiariaDiasGracia: 3,
+      DbConstants.configuracionMoraDiariaTipoRecargo: 'PORCENTAJE',
+      DbConstants.configuracionMoraDiariaValorRecargo: 10.0,
+      DbConstants.configuracionMoraDiariaRecargoAcumulable: 0,
+      DbConstants.configuracionMoraSemanalDiasGracia: 3,
+      DbConstants.configuracionMoraSemanalTipoRecargo: 'PORCENTAJE',
+      DbConstants.configuracionMoraSemanalValorRecargo: 10.0,
+      DbConstants.configuracionMoraSemanalRecargoAcumulable: 0,
+      DbConstants.configuracionMoraQuincenalDiasGracia: 3,
+      DbConstants.configuracionMoraQuincenalTipoRecargo: 'PORCENTAJE',
+      DbConstants.configuracionMoraQuincenalValorRecargo: 10.0,
+      DbConstants.configuracionMoraQuincenalRecargoAcumulable: 0,
+      DbConstants.configuracionMoraMensualDiasGracia: 3,
+      DbConstants.configuracionMoraMensualTipoRecargo: 'PORCENTAJE',
+      DbConstants.configuracionMoraMensualValorRecargo: 10.0,
+      DbConstants.configuracionMoraMensualRecargoAcumulable: 0,
       DbConstants.configuracionMoneda: 'COP',
     });
   }
@@ -170,7 +208,9 @@ class DatabaseHelper {
   /// Migraciones versionadas. Añade un bloque `if (oldVersion < N)` por
   /// cada nueva versión del esquema y sube [DbConstants.databaseVersion].
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    debugPrint('GotaControl: migrando base de datos v$oldVersion → v$newVersion');
+    debugPrint(
+      'GotaControl: migrando base de datos v$oldVersion → v$newVersion',
+    );
 
     if (oldVersion < 2) {
       await db.execute(
@@ -186,10 +226,9 @@ class DatabaseHelper {
         'ALTER TABLE ${DbConstants.tableConfiguracion} '
         'ADD COLUMN ${DbConstants.configuracionPinBloqueadoHasta} INTEGER',
       );
-      await db.update(
-        DbConstants.tableConfiguracion,
-        {DbConstants.configuracionPinSeguridad: null},
-      );
+      await db.update(DbConstants.tableConfiguracion, {
+        DbConstants.configuracionPinSeguridad: null,
+      });
     }
     if (oldVersion < 3) {
       await db.execute(
@@ -223,7 +262,116 @@ class DatabaseHelper {
         'ADD COLUMN ${DbConstants.configuracionUltimoRespaldo} INTEGER',
       );
     }
+    if (oldVersion < 5) {
+      await db.execute(
+        'ALTER TABLE ${DbConstants.tablePrestamos} '
+        'ADD COLUMN ${DbConstants.prestamoDiasGraciaMora} '
+        'INTEGER NOT NULL DEFAULT 3',
+      );
+      await db.execute(
+        'ALTER TABLE ${DbConstants.tablePrestamos} '
+        'ADD COLUMN ${DbConstants.prestamoTipoRecargoMora} '
+        "TEXT NOT NULL DEFAULT 'PORCENTAJE'",
+      );
+      await db.execute(
+        'ALTER TABLE ${DbConstants.tablePrestamos} '
+        'ADD COLUMN ${DbConstants.prestamoValorRecargoMora} '
+        'REAL NOT NULL DEFAULT 10',
+      );
+      await db.execute(
+        'ALTER TABLE ${DbConstants.tablePrestamos} '
+        'ADD COLUMN ${DbConstants.prestamoRecargoAcumulable} '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.execute(
+        'ALTER TABLE ${DbConstants.tableCuotas} '
+        'ADD COLUMN ${DbConstants.cuotaMontoPenalizacion} '
+        'REAL NOT NULL DEFAULT 0',
+      );
+      for (final field in _moraConfigFields.entries) {
+        await db.execute(
+          'ALTER TABLE ${DbConstants.tableConfiguracion} '
+          'ADD COLUMN ${field.key} ${field.value}',
+        );
+      }
+      await db.execute(
+        'UPDATE ${DbConstants.tableConfiguracion} SET '
+        '${DbConstants.configuracionMoraDiariaDiasGracia} = '
+        '${DbConstants.configuracionDiasGraciaMora}, '
+        '${DbConstants.configuracionMoraDiariaValorRecargo} = '
+        '${DbConstants.configuracionPorcentajeMora}, '
+        '${DbConstants.configuracionMoraSemanalDiasGracia} = '
+        '${DbConstants.configuracionDiasGraciaMora}, '
+        '${DbConstants.configuracionMoraSemanalValorRecargo} = '
+        '${DbConstants.configuracionPorcentajeMora}, '
+        '${DbConstants.configuracionMoraQuincenalDiasGracia} = '
+        '${DbConstants.configuracionDiasGraciaMora}, '
+        '${DbConstants.configuracionMoraQuincenalValorRecargo} = '
+        '${DbConstants.configuracionPorcentajeMora}, '
+        '${DbConstants.configuracionMoraMensualDiasGracia} = '
+        '${DbConstants.configuracionDiasGraciaMora}, '
+        '${DbConstants.configuracionMoraMensualValorRecargo} = '
+        '${DbConstants.configuracionPorcentajeMora}',
+      );
+      await db.execute(
+        'UPDATE ${DbConstants.tablePrestamos} SET '
+        '${DbConstants.prestamoDiasGraciaMora} = COALESCE(('
+        'SELECT ${DbConstants.configuracionDiasGraciaMora} '
+        'FROM ${DbConstants.tableConfiguracion} LIMIT 1), 3), '
+        '${DbConstants.prestamoValorRecargoMora} = COALESCE(('
+        'SELECT ${DbConstants.configuracionPorcentajeMora} '
+        'FROM ${DbConstants.tableConfiguracion} LIMIT 1), 10)',
+      );
+    }
+    if (oldVersion < 7) {
+      final prestamoColumns = await db.rawQuery(
+        'PRAGMA table_info(${DbConstants.tablePrestamos})',
+      );
+      final tieneDiasCorridos = prestamoColumns.any(
+        (column) => column['name'] == DbConstants.prestamoDiasCorridos,
+      );
+      if (!tieneDiasCorridos) {
+        await db.execute(
+          'ALTER TABLE ${DbConstants.tablePrestamos} '
+          'ADD COLUMN ${DbConstants.prestamoDiasCorridos} '
+          'INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+    }
   }
+
+  static const _moraConfigFields = {
+    DbConstants.configuracionMoraDiariaDiasGracia: 'INTEGER NOT NULL DEFAULT 3',
+    DbConstants.configuracionMoraDiariaTipoRecargo:
+        "TEXT NOT NULL DEFAULT 'PORCENTAJE'",
+    DbConstants.configuracionMoraDiariaValorRecargo: 'REAL NOT NULL DEFAULT 10',
+    DbConstants.configuracionMoraDiariaRecargoAcumulable:
+        'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraSemanalDiasGracia:
+        'INTEGER NOT NULL DEFAULT 3',
+    DbConstants.configuracionMoraSemanalTipoRecargo:
+        "TEXT NOT NULL DEFAULT 'PORCENTAJE'",
+    DbConstants.configuracionMoraSemanalValorRecargo:
+        'REAL NOT NULL DEFAULT 10',
+    DbConstants.configuracionMoraSemanalRecargoAcumulable:
+        'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraQuincenalDiasGracia:
+        'INTEGER NOT NULL DEFAULT 3',
+    DbConstants.configuracionMoraQuincenalTipoRecargo:
+        "TEXT NOT NULL DEFAULT 'PORCENTAJE'",
+    DbConstants.configuracionMoraQuincenalValorRecargo:
+        'REAL NOT NULL DEFAULT 10',
+    DbConstants.configuracionMoraQuincenalRecargoAcumulable:
+        'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraMensualDiasGracia:
+        'INTEGER NOT NULL DEFAULT 3',
+    DbConstants.configuracionMoraMensualTipoRecargo:
+        "TEXT NOT NULL DEFAULT 'PORCENTAJE'",
+    DbConstants.configuracionMoraMensualValorRecargo:
+        'REAL NOT NULL DEFAULT 10',
+    DbConstants.configuracionMoraMensualRecargoAcumulable:
+        'INTEGER NOT NULL DEFAULT 0',
+  };
 
   Future<void> close() async {
     final currentDatabase = _database;
@@ -413,6 +561,34 @@ class DatabaseHelper {
       ['ACTIVO', 'MORA'],
     );
     return _asDouble(rows.first['total']);
+  }
+
+  Future<Map<String, Object?>> obtenerEstadisticasPrestamos() async {
+    final db = await database;
+    final activos = await db.rawQuery(
+      'SELECT '
+      'COALESCE(SUM(${DbConstants.prestamoMontoCapital}), 0) AS capital, '
+      'COALESCE(SUM(${DbConstants.prestamoMontoInteres}), 0) AS interes '
+      'FROM ${DbConstants.tablePrestamos} '
+      'WHERE ${DbConstants.prestamoEstado} IN (?, ?)',
+      ['ACTIVO', 'MORA'],
+    );
+    final mensuales = await db.rawQuery(
+      'SELECT strftime(\'%Y-%m\', '
+      'substr(${DbConstants.prestamoFechaInicio}, 1, 10)) AS mes, '
+      'COALESCE(SUM(${DbConstants.prestamoMontoCapital}), 0) AS capital, '
+      'COALESCE(SUM(${DbConstants.prestamoMontoInteres}), 0) AS interes, '
+      'COUNT(*) AS prestamos '
+      'FROM ${DbConstants.tablePrestamos} '
+      'GROUP BY mes ORDER BY mes ASC',
+    );
+    return {
+      'capital_activo': _asDouble(activos.first['capital']),
+      'interes_activo': _asDouble(activos.first['interes']),
+      'mensuales': mensuales
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false),
+    };
   }
 
   // ─────────────────────────── CUOTAS ───────────────────────────
@@ -715,10 +891,7 @@ class DatabaseHelper {
 
   Future<Map<String, Object?>?> obtenerConfiguracion() async {
     final db = await database;
-    final rows = await db.query(
-      DbConstants.tableConfiguracion,
-      limit: 1,
-    );
+    final rows = await db.query(DbConstants.tableConfiguracion, limit: 1);
     return rows.isEmpty ? null : Map<String, Object?>.from(rows.first);
   }
 

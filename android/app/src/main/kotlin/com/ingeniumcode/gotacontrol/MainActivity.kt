@@ -24,7 +24,6 @@ class MainActivity : FlutterActivity() {
     }
     private var pendingBackupResult: MethodChannel.Result? = null
     private var pendingPickerMethod: String? = null
-    private var pendingStartupDatabasePath: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -104,23 +103,7 @@ class MainActivity : FlutterActivity() {
                                     "GotaControlBackup",
                                     "Startup restore check: $status",
                                 )
-                                mainHandler.post {
-                                    if (status["needsFolderAccess"] == true) {
-                                        pendingStartupDatabasePath = databasePath
-                                        launchPicker(
-                                            method = call.method,
-                                            result = result,
-                                            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                                                .putExtra(
-                                                    Intent.EXTRA_TITLE,
-                                                    "Selecciona la carpeta de respaldos de GotaControl",
-                                                ),
-                                            requestCode = REQUEST_BACKUP_FOLDER,
-                                        )
-                                    } else {
-                                        result.success(status)
-                                    }
-                                }
+                                mainHandler.post { result.success(status) }
                             } catch (error: Exception) {
                                 LocalBackupContract.recordFailure(this, error.message)
                                 mainHandler.post {
@@ -260,17 +243,7 @@ class MainActivity : FlutterActivity() {
         pendingBackupResult = null
         pendingPickerMethod = null
         if (resultCode != RESULT_OK || data?.data == null) {
-            if (method == "restoreLatestBackupIfMissing") {
-                pendingStartupDatabasePath = null
-                result.success(
-                    mapOf(
-                        "restored" to false,
-                        "reason" to "folder_selection_cancelled",
-                    ),
-                )
-            } else {
-                result.success(null)
-            }
+            result.success(null)
             return
         }
         val uri = data.data!!
@@ -282,39 +255,9 @@ class MainActivity : FlutterActivity() {
                 contentResolver.takePersistableUriPermission(uri, flags)
                 LocalBackupContract.storeTreeUri(this, uri)
                 val displayName = DocumentFile.fromTreeUri(this, uri)?.name ?: "Documentos"
-                if (method == "restoreLatestBackupIfMissing") {
-                    val databasePath = pendingStartupDatabasePath
-                    pendingStartupDatabasePath = null
-                    if (databasePath == null) {
-                        result.error(
-                            "restore_setup_missing",
-                            "No se encontró la ruta de la base de datos local.",
-                            null,
-                        )
-                    } else {
-                        backupExecutor.execute {
-                            try {
-                                val restoreStatus = LocalBackupContract
-                                    .restoreLatestBackupFromTree(this, databasePath, uri)
-                                android.util.Log.i(
-                                    "GotaControlBackup",
-                                    "SAF startup restore result: $restoreStatus",
-                                )
-                                mainHandler.post { result.success(restoreStatus) }
-                            } catch (error: Exception) {
-                                LocalBackupContract.recordFailure(this, error.message)
-                                mainHandler.post {
-                                    result.error("startup_restore_failed", error.message, null)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    LocalBackupContract.scheduleSavedFrequency(this, uri)
-                    result.success(mapOf("uri" to uri.toString(), "name" to displayName))
-                }
+                LocalBackupContract.scheduleSavedFrequency(this, uri)
+                result.success(mapOf("uri" to uri.toString(), "name" to displayName))
             } catch (error: Exception) {
-                pendingStartupDatabasePath = null
                 result.error("folder_access_failed", error.message, null)
             }
             return

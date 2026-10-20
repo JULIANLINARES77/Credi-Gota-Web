@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../data/models/cliente.dart';
 import '../../../logic/providers/gota_provider.dart';
 import '../../widgets/cliente_card.dart';
+import '../../widgets/cliente_form_dialog.dart';
 import '../prestamos/prestamos_cliente_screen.dart';
 
 class ClientesScreen extends StatefulWidget {
@@ -205,6 +206,10 @@ class _ClientesScreenState extends State<ClientesScreen> {
       proximoPago: cuotaSiguiente?.fechaVencimiento,
       cantidadPrestamosActivos: prestamosActivos.length,
       onTap: () => _abrirPrestamosCliente(clienteId),
+      onEditar: () => _modificarCliente(cliente),
+      onBuscarMaps: cliente.direccion?.trim().isNotEmpty == true
+          ? () => ClienteCard.abrirMaps(context, cliente.direccion!)
+          : null,
       onEliminar: () => _eliminarCliente(cliente),
     );
     return Dismissible(
@@ -280,6 +285,33 @@ class _ClientesScreenState extends State<ClientesScreen> {
     await _desactivarCliente(cliente);
   }
 
+  Future<void> _modificarCliente(Cliente cliente) async {
+    final datos = await mostrarClienteFormDialog(context, cliente: cliente);
+    if (datos == null || !mounted) return;
+    try {
+      await context.read<GotaProvider>().actualizarCliente(
+        cliente: cliente,
+        nombre: datos.nombre,
+        telefono: datos.telefono,
+        cedula: datos.cedula,
+        direccion: datos.direccion,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cliente actualizado correctamente.')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      final mensaje = error
+          .toString()
+          .replaceFirst('ArgumentError: ', '')
+          .replaceFirst('StateError: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
+    }
+  }
+
   Future<void> _desactivarCliente(Cliente cliente) async {
     final clienteId = cliente.id;
     if (clienteId == null) return;
@@ -296,86 +328,28 @@ class _ClientesScreenState extends State<ClientesScreen> {
   }
 
   Future<void> _agregarCliente() async {
-    final nombre = TextEditingController();
-    final telefono = TextEditingController();
-    final cedula = TextEditingController();
-
+    final datos = await mostrarClienteFormDialog(context);
+    if (datos == null || !mounted) return;
     try {
-      final confirmado = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Nuevo cliente'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nombre,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Nombre completo'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: telefono,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Teléfono'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: cedula,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Cédula (opcional)',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Guardar'),
-            ),
-          ],
-        ),
+      await context.read<GotaProvider>().agregarCliente(
+        nombre: datos.nombre,
+        telefono: datos.telefono,
+        cedula: datos.cedula,
+        direccion: datos.direccion,
       );
-
       if (!mounted) return;
-      if (confirmado != true) return;
-
-      if (nombre.text.trim().isEmpty || telefono.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nombre y teléfono son obligatorios.')),
-        );
-        return;
-      }
-
-      try {
-        await context.read<GotaProvider>().agregarCliente(
-          nombre: nombre.text,
-          telefono: telefono.text,
-          cedula: cedula.text.isEmpty ? null : cedula.text,
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cliente guardado correctamente.')),
-        );
-      } on Object catch (error) {
-        if (!mounted) return;
-        final mensaje = error
-            .toString()
-            .replaceFirst('ArgumentError: ', '')
-            .replaceFirst('StateError: ', '');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(mensaje)));
-      }
-    } finally {
-      nombre.dispose();
-      telefono.dispose();
-      cedula.dispose();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cliente guardado correctamente.')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      final mensaje = error
+          .toString()
+          .replaceFirst('ArgumentError: ', '')
+          .replaceFirst('StateError: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
     }
   }
 

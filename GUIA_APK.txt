@@ -1,0 +1,104 @@
+GotaControl - Guia para generar la APK Android
+================================================
+
+Requisitos
+----------
+- Windows PowerShell.
+- Flutter 3.44.8 y Dart 3.12.2 (segun pubspec.yaml).
+- Android SDK y un JDK compatible.
+- Para una APK de produccion: android/key.properties y el keystore configurado.
+
+Comandos
+--------
+
+1. Abrir el proyecto:
+
+   cd "C:\Users\linar\OneDrive\Desktop\Aplicacion de prestamos\flutter_prestamos"
+
+2. Comprobar las herramientas:
+
+   flutter --version
+   dart --version
+   java -version
+   flutter doctor -v
+
+3. Restaurar dependencias:
+
+   flutter pub get
+
+4. Ejecutar pruebas:
+
+   flutter test
+
+5. Analizar el codigo:
+
+   flutter analyze
+
+6. Generar APK release ARM64 para telefonos Android modernos:
+
+   flutter build apk --release --target-platform android-arm64
+
+   El archivo queda en:
+   build\app\outputs\flutter-apk\app-release.apk
+
+7. Instalar en un dispositivo conectado:
+
+   adb devices
+   adb install -r build\app\outputs\flutter-apk\app-release.apk
+
+8. Limpiar artefactos generados si el disco se llena:
+
+   flutter clean
+   flutter pub get
+   flutter build apk --release --target-platform android-arm64
+
+Herramientas principales
+------------------------
+- Flutter: framework, compilador y comandos de ejecucion de la app.
+- Dart: lenguaje y analizador estatico de Flutter.
+- flutter pub get: descarga las dependencias declaradas en pubspec.yaml.
+- flutter test: ejecuta las pruebas unitarias, de widgets e integracion.
+- flutter analyze: detecta errores de tipos, imports y reglas de lint.
+- Gradle: sistema Android que compila el proyecto y empaqueta la APK.
+- Android SDK/ADB: herramientas para compilar y comunicarse con el telefono.
+- JDK: Java requerido por Gradle y Android Gradle Plugin.
+- ARM64: arquitectura usada por la mayoria de telefonos Android actuales.
+- release: compilacion optimizada para distribucion, no para hot reload.
+
+Firma y publicacion
+-------------------
+- Si existe android\key.properties, Gradle usa la firma release configurada.
+- Si no existe, el proyecto puede usar una firma de desarrollo. No publicar
+  una APK sin verificar el certificado.
+- Verificar el certificado con:
+
+  $bt = Get-ChildItem "$env:LOCALAPPDATA\Android\Sdk\build-tools" -Directory |
+    Sort-Object Name -Descending | Select-Object -First 1
+  & "$($bt.FullName)\apksigner.bat" verify --print-certs `
+    build\app\outputs\flutter-apk\app-release.apk
+
+Problemas frecuentes
+--------------------
+- "No space left on device": ejecutar flutter clean y borrar solo artefactos
+  generados del directorio build; no borrar la base de datos ni respaldos.
+- "JAVA_HOME apunta a una carpeta inexistente": seleccionar el JDK incluido
+  con Android Studio:
+
+  $env:JAVA_HOME = "$env:ProgramFiles\Android\Android Studio\jbr"
+  $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+
+- Versiones incompatibles de Flutter, Dart, Gradle, Android Gradle Plugin o
+  Kotlin: ejecutar flutter doctor -v, usar las versiones indicadas arriba y
+  revisar android\gradle\wrapper\gradle-wrapper.properties y
+  android\settings.gradle. No actualizar varias herramientas a la vez sin
+  validar flutter test y flutter build.
+- "INSTALL_FAILED_UPDATE_INCOMPATIBLE": la APK tiene otra firma. No borrar
+  datos automaticamente; instalar con el certificado correcto o desinstalar
+  solo despues de exportar/verificar el respaldo.
+- "adb device unauthorized": desbloquear el telefono, aceptar la depuracion
+  USB y ejecutar adb devices nuevamente.
+- Falta de notificaciones en Android 13+: habilitar POST_NOTIFICATIONS en
+  Ajustes del telefono y revisar Ajustes -> Notificaciones en GotaControl.
+- Gradle puede advertir que futuras versiones de Flutter dejaran de soportar
+  una version antigua de Gradle, AGP o Kotlin. Es una advertencia de
+  compatibilidad futura; actualizar de forma coordinada y volver a probar.

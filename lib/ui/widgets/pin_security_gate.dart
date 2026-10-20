@@ -19,8 +19,12 @@ class PinSecurityGate extends StatefulWidget {
 
 class _PinSecurityGateState extends State<PinSecurityGate>
     with WidgetsBindingObserver {
+  static const _tiempoInactividad = Duration(seconds: 90);
+
   late final GotaProvider _provider;
   bool _unlocked = false;
+  DateTime? _pausadaEn;
+  Timer? _bloqueoPorInactividad;
 
   @override
   void initState() {
@@ -31,24 +35,49 @@ class _PinSecurityGateState extends State<PinSecurityGate>
 
   @override
   void dispose() {
+    _bloqueoPorInactividad?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && _provider.pinActivo && _unlocked) {
-      setState(() => _unlocked = false);
+    if (!_provider.pinActivo || !_unlocked) return;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _pausadaEn ??= DateTime.now();
+      _programarBloqueo();
+    } else if (state == AppLifecycleState.resumed) {
+      final pausadaEn = _pausadaEn;
+      _pausadaEn = null;
+      _bloqueoPorInactividad?.cancel();
+      _bloqueoPorInactividad = null;
+      if (pausadaEn != null &&
+          DateTime.now().difference(pausadaEn) >= _tiempoInactividad) {
+        _bloquear();
+      }
     }
+  }
+
+  void _programarBloqueo() {
+    _bloqueoPorInactividad?.cancel();
+    _bloqueoPorInactividad = Timer(_tiempoInactividad, _bloquear);
+  }
+
+  void _bloquear() {
+    if (!mounted || !_provider.pinActivo || !_unlocked) return;
+    setState(() {
+      _unlocked = false;
+      _pausadaEn = null;
+    });
+    _bloqueoPorInactividad = null;
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GotaProvider>();
     if (provider.cargando) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (provider.errorCarga != null) {
       return Scaffold(
@@ -135,7 +164,11 @@ class _PinUnlockScreenState extends State<_PinUnlockScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 52, color: AppColors.primary),
+                const Icon(
+                  Icons.lock_outline,
+                  size: 52,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Desbloquear GotaControl',

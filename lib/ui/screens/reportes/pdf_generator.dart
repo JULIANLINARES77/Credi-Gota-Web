@@ -195,6 +195,47 @@ class PdfGenerator {
         ),
       ]);
 
+  static Future<Uint8List> reporteEstadisticas(GotaProvider demo) async {
+    final estadisticas = await demo.obtenerEstadisticasPrestamos();
+    final meses = (estadisticas['mensuales'] as List<Object?>? ?? const [])
+        .whereType<Map<String, Object?>>()
+        .toList(growable: false);
+    return _documento('Estadísticas del Negocio', DateTime.now(), [
+      _resumen([
+        (
+          'Capital total prestado activo',
+          _pesos((estadisticas['capital_activo'] as num?)?.toDouble() ?? 0),
+        ),
+        (
+          'Interés total esperado activo',
+          _pesos((estadisticas['interes_activo'] as num?)?.toDouble() ?? 0),
+        ),
+        ('Meses registrados', '${meses.length}'),
+      ]),
+      _titulo('Comparativa mensual de préstamos originados'),
+      if (meses.isEmpty)
+        _texto('No hay préstamos registrados para comparar.')
+      else
+        _tabla(
+          ['Mes', 'Préstamos', 'Capital prestado', 'Interés esperado'],
+          meses
+              .map(
+                (mes) => [
+                  _nombreMes(mes['mes'] as String? ?? ''),
+                  '${(mes['prestamos'] as num?)?.toInt() ?? 0}',
+                  _pesos((mes['capital'] as num?)?.toDouble() ?? 0),
+                  _pesos((mes['interes'] as num?)?.toDouble() ?? 0),
+                ],
+              )
+              .toList(),
+        ),
+      _texto(
+        'La comparativa agrupa los préstamos por su fecha de inicio e incluye '
+        'el capital y el interés pactado, no los pagos recaudados.',
+      ),
+    ]);
+  }
+
   static Future<Uint8List> reporteSemanal(GotaProvider demo, DateTime fecha) {
     final dia = DateTime(fecha.year, fecha.month, fecha.day);
     final inicio = dia.subtract(Duration(days: dia.weekday - DateTime.monday));
@@ -559,6 +600,31 @@ class PdfGenerator {
   );
 
   static String _pesos(double valor) => GotaDateUtils.formatearMoneda(valor);
+
+  static String _nombreMes(String mes) {
+    final partes = mes.split('-');
+    if (partes.length != 2) return mes;
+    final anio = int.tryParse(partes[0]);
+    final numeroMes = int.tryParse(partes[1]);
+    if (anio == null || numeroMes == null || numeroMes < 1 || numeroMes > 12) {
+      return mes;
+    }
+    const nombres = [
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
+    ];
+    return '${nombres[numeroMes - 1]} $anio';
+  }
 
   static bool _mismaFecha(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;

@@ -30,8 +30,12 @@ class _AjustesScreenState extends State<AjustesScreen>
   final _negocio = TextEditingController(text: 'GotaControl');
   final _telefono = TextEditingController();
   final _direccion = TextEditingController();
-  final _porcentajeMora = TextEditingController(text: '10');
-  final _diasGracia = TextEditingController(text: '3');
+  final _reglasMora = <String, _ReglaMoraEdicion>{
+    'DIARIA': _ReglaMoraEdicion(),
+    'SEMANAL': _ReglaMoraEdicion(),
+    'QUINCENAL': _ReglaMoraEdicion(),
+    'MENSUAL': _ReglaMoraEdicion(),
+  };
   bool _alertasMora = true;
   bool _recordatorioDiario = false;
   TimeOfDay _horaRecordatorio = const TimeOfDay(hour: 8, minute: 0);
@@ -43,6 +47,33 @@ class _AjustesScreenState extends State<AjustesScreen>
   LocalBackupStatus? _estadoRespaldo;
   String? _errorRespaldo;
   bool? _notificacionesHabilitadas;
+
+  static const _clavesReglasMora = {
+    'DIARIA': (
+      DbConstants.configuracionMoraDiariaDiasGracia,
+      DbConstants.configuracionMoraDiariaTipoRecargo,
+      DbConstants.configuracionMoraDiariaValorRecargo,
+      DbConstants.configuracionMoraDiariaRecargoAcumulable,
+    ),
+    'SEMANAL': (
+      DbConstants.configuracionMoraSemanalDiasGracia,
+      DbConstants.configuracionMoraSemanalTipoRecargo,
+      DbConstants.configuracionMoraSemanalValorRecargo,
+      DbConstants.configuracionMoraSemanalRecargoAcumulable,
+    ),
+    'QUINCENAL': (
+      DbConstants.configuracionMoraQuincenalDiasGracia,
+      DbConstants.configuracionMoraQuincenalTipoRecargo,
+      DbConstants.configuracionMoraQuincenalValorRecargo,
+      DbConstants.configuracionMoraQuincenalRecargoAcumulable,
+    ),
+    'MENSUAL': (
+      DbConstants.configuracionMoraMensualDiasGracia,
+      DbConstants.configuracionMoraMensualTipoRecargo,
+      DbConstants.configuracionMoraMensualValorRecargo,
+      DbConstants.configuracionMoraMensualRecargoAcumulable,
+    ),
+  };
 
   @override
   void initState() {
@@ -61,8 +92,10 @@ class _AjustesScreenState extends State<AjustesScreen>
     _negocio.dispose();
     _telefono.dispose();
     _direccion.dispose();
-    _porcentajeMora.dispose();
-    _diasGracia.dispose();
+    for (final regla in _reglasMora.values) {
+      regla.diasGracia.dispose();
+      regla.valorRecargo.dispose();
+    }
     super.dispose();
   }
 
@@ -97,10 +130,18 @@ class _AjustesScreenState extends State<AjustesScreen>
               configuracion[DbConstants.configuracionDireccionNegocio]
                   as String? ??
               '';
-          _porcentajeMora.text =
-              '${configuracion[DbConstants.configuracionPorcentajeMora] ?? 10}';
-          _diasGracia.text =
-              '${configuracion[DbConstants.configuracionDiasGraciaMora] ?? 3}';
+          for (final entry in _reglasMora.entries) {
+            final keys = _clavesReglasMora[entry.key]!;
+            final regla = entry.value;
+            regla.diasGracia.text =
+                '${configuracion[keys.$1] ?? configuracion[DbConstants.configuracionDiasGraciaMora] ?? 3}';
+            regla.tipoRecargo =
+                configuracion[keys.$2] as String? ?? 'PORCENTAJE';
+            regla.valorRecargo.text =
+                '${configuracion[keys.$3] ?? configuracion[DbConstants.configuracionPorcentajeMora] ?? 10}';
+            regla.acumulable =
+                ((configuracion[keys.$4] as num?)?.toInt() ?? 0) != 0;
+          }
           _alertasMora =
               ((configuracion[DbConstants.configuracionAlertasMora] as num?)
                       ?.toInt() ??
@@ -199,46 +240,11 @@ class _AjustesScreenState extends State<AjustesScreen>
                       ],
                     ),
                     _Seccion(
-                      titulo: 'Configuración de mora',
+                      titulo: 'Reglas de mora por frecuencia',
                       icono: Icons.warning_amber_outlined,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _porcentajeMora,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                maxLength: 6,
-                                validator: _validarPorcentajeMora,
-                                decoration: const InputDecoration(
-                                  labelText: 'Porcentaje de mora',
-                                  suffixText: '%',
-                                  counterText: '',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _diasGracia,
-                                keyboardType: TextInputType.number,
-                                maxLength: 3,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(3),
-                                ],
-                                validator: _validarDiasGracia,
-                                decoration: const InputDecoration(
-                                  labelText: 'Días de gracia',
-                                  counterText: '',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        for (final entry in _reglasMora.entries)
+                          _editorReglaMora(entry.key, entry.value),
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Alertas de mora'),
@@ -363,6 +369,89 @@ class _AjustesScreenState extends State<AjustesScreen>
       ),
     );
   }
+
+  Widget _editorReglaMora(String frecuencia, _ReglaMoraEdicion regla) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Pago $frecuencia',
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              controller: regla.diasGracia,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+              validator: (value) {
+                final dias = int.tryParse(value ?? '');
+                return dias == null || dias > 365
+                    ? 'Usa un valor entre 0 y 365'
+                    : null;
+              },
+              decoration: const InputDecoration(labelText: 'Días de gracia'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: regla.tipoRecargo,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Tipo'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'PORCENTAJE',
+                  child: Text('Porcentaje (%)'),
+                ),
+                DropdownMenuItem(value: 'MONTO_FIJO', child: Text('Fijo (\$)')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => regla.tipoRecargo = value);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      TextFormField(
+        controller: regla.valorRecargo,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: (value) {
+          final amount = double.tryParse(
+            (value ?? '').trim().replaceAll(',', '.'),
+          );
+          if (amount == null || !amount.isFinite || amount < 0) {
+            return 'Ingresa un valor válido no negativo';
+          }
+          if (regla.tipoRecargo == 'PORCENTAJE' && amount > 100) {
+            return 'El porcentaje no puede superar 100';
+          }
+          if (regla.tipoRecargo == 'MONTO_FIJO' && amount > 100000000) {
+            return 'El monto no puede superar \$100.000.000';
+          }
+          return null;
+        },
+        decoration: InputDecoration(
+          labelText: 'Valor del recargo',
+          suffixText: regla.tipoRecargo == 'PORCENTAJE' ? '%' : '\$',
+        ),
+      ),
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Recargo acumulable por cada periodo de gracia'),
+        value: regla.acumulable,
+        onChanged: (value) => setState(() => regla.acumulable = value),
+      ),
+      const Divider(),
+    ],
+  );
 
   void _mensaje(String texto) => ScaffoldMessenger.of(
     context,
@@ -531,29 +620,6 @@ class _AjustesScreenState extends State<AjustesScreen>
     if (requerido && texto.isEmpty) return '$etiqueta es obligatorio.';
     if (texto.length > maximo) {
       return '$etiqueta no puede superar $maximo caracteres.';
-    }
-    return null;
-  }
-
-  String? _validarPorcentajeMora(String? valor) {
-    final porcentaje = double.tryParse(
-      (valor ?? '').trim().replaceAll(',', '.'),
-    );
-    if (porcentaje == null ||
-        !porcentaje.isFinite ||
-        porcentaje < 0 ||
-        porcentaje > AjustesNegocioValidator.maxPorcentajeMora) {
-      return 'Ingresa un porcentaje entre 0 y 100.';
-    }
-    return null;
-  }
-
-  String? _validarDiasGracia(String? valor) {
-    final dias = int.tryParse((valor ?? '').trim());
-    if (dias == null ||
-        dias < 0 ||
-        dias > AjustesNegocioValidator.maxDiasGracia) {
-      return 'Ingresa entre 0 y 365 días.';
     }
     return null;
   }
@@ -938,15 +1004,15 @@ class _AjustesScreenState extends State<AjustesScreen>
 
   Future<void> _guardarAjustes(GotaProvider provider) async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    final porcentaje = double.tryParse(
-      _porcentajeMora.text.trim().replaceAll(',', '.'),
-    );
-    final dias = int.tryParse(_diasGracia.text.trim());
-    if (porcentaje == null || dias == null) return;
+    final diaria = _reglasMora['DIARIA']!;
+    final porcentaje = diaria.tipoRecargo == 'PORCENTAJE'
+        ? double.parse(diaria.valorRecargo.text.trim().replaceAll(',', '.'))
+        : 10.0;
+    final dias = int.parse(diaria.diasGracia.text.trim());
 
     setState(() => _guardando = true);
     try {
-      await provider.guardarConfiguracion({
+      final cambios = <String, Object?>{
         DbConstants.configuracionNombreNegocio: _negocio.text.trim(),
         DbConstants.configuracionTelefonoNegocio: _telefono.text.trim(),
         DbConstants.configuracionDireccionNegocio: _direccion.text.trim(),
@@ -959,7 +1025,20 @@ class _AjustesScreenState extends State<AjustesScreen>
         DbConstants.configuracionHoraRecordatorio:
             '${_horaRecordatorio.hour.toString().padLeft(2, '0')}:'
             '${_horaRecordatorio.minute.toString().padLeft(2, '0')}',
-      });
+        for (final entry in _reglasMora.entries)
+          _clavesReglasMora[entry.key]!.$1: int.parse(
+            entry.value.diasGracia.text.trim(),
+          ),
+        for (final entry in _reglasMora.entries)
+          _clavesReglasMora[entry.key]!.$2: entry.value.tipoRecargo,
+        for (final entry in _reglasMora.entries)
+          _clavesReglasMora[entry.key]!.$3: double.parse(
+            entry.value.valorRecargo.text.trim().replaceAll(',', '.'),
+          ),
+        for (final entry in _reglasMora.entries)
+          _clavesReglasMora[entry.key]!.$4: entry.value.acumulable ? 1 : 0,
+      };
+      await provider.guardarConfiguracion(cambios);
       try {
         await NotificacionService.instance.sincronizarConDatos(provider);
         if (mounted) _mensaje('Ajustes guardados en este dispositivo.');
@@ -1008,9 +1087,12 @@ class _Seccion extends StatelessWidget {
               children: [
                 Icon(icono, color: AppColors.primary, size: 19),
                 const SizedBox(width: 8),
-                Text(
-                  titulo,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    titulo,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -1021,4 +1103,11 @@ class _Seccion extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _ReglaMoraEdicion {
+  final diasGracia = TextEditingController(text: '3');
+  final valorRecargo = TextEditingController(text: '10');
+  String tipoRecargo = 'PORCENTAJE';
+  bool acumulable = false;
 }

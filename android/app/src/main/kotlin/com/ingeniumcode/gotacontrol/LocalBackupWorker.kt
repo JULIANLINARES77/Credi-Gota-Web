@@ -50,7 +50,7 @@ internal object LocalBackupContract {
     const val CHANNEL = "gotacontrol/local_backup"
     const val DATABASE_PATH = "database_path"
     const val TREE_URI = "tree_uri"
-    const val CURRENT_DATABASE_VERSION = 4
+    const val CURRENT_DATABASE_VERSION = 7
     const val BACKUP_FOLDER = "GotaControl"
     const val AUTOMATIC_PREFIX = "GotaControl_auto_"
     const val MANUAL_PREFIX = "GotaControl_manual_"
@@ -159,9 +159,6 @@ internal object LocalBackupContract {
         val snapshot = File(context.cacheDir, "backup-${System.nanoTime()}.db")
         try {
             createConsistentSnapshot(source, snapshot)
-            if (automatic && !databaseHasBusinessData(snapshot)) {
-                return@synchronized "empty_database_skipped"
-            }
             val prefix = prefixOverride ?: if (automatic) AUTOMATIC_PREFIX else MANUAL_PREFIX
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val name = "$prefix$timestamp.db"

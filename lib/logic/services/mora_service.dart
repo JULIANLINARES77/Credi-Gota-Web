@@ -3,8 +3,6 @@ import '../../data/database/database_helper.dart';
 import '../../data/models/cliente.dart';
 import '../../data/models/cuota.dart';
 import '../../data/models/prestamo.dart';
-import '../../core/utils/moneda_colombiana.dart';
-import 'calculadora_service.dart';
 
 class PrestamoEnMora {
   const PrestamoEnMora({
@@ -23,49 +21,60 @@ class PrestamoEnMora {
 }
 
 class MoraService {
-  MoraService({
-    DatabaseHelper? databaseHelper,
-    DateTime Function()? reloj,
-    this.diasGracia = 3,
-    this._calculadora = const CalculadoraService(),
-  }) : _databaseHelper = databaseHelper ?? DatabaseHelper.instance,
-       _reloj = reloj ?? DateTime.now;
+  MoraService({DatabaseHelper? databaseHelper, DateTime Function()? reloj})
+    : _databaseHelper = databaseHelper ?? DatabaseHelper.instance,
+      _reloj = reloj ?? DateTime.now;
 
   final DatabaseHelper _databaseHelper;
   final DateTime Function() _reloj;
-  final int diasGracia;
-  final CalculadoraService _calculadora;
 
-  int calcularDiasAtraso(DateTime fechaVencimiento) {
-    final hoy = _soloFecha(_reloj());
+  int calcularDiasAtraso(
+    DateTime fechaVencimiento, {
+    DateTime? fechaReferencia,
+  }) {
+    final hoy = _soloFecha(fechaReferencia ?? _reloj());
     final vencimiento = _soloFecha(fechaVencimiento);
     return hoy.difference(vencimiento).inDays.clamp(0, 1 << 31);
   }
 
   double calcularPenalizacionMora({
+    required Prestamo prestamo,
     required Cuota cuota,
-    required double porcentajeMora,
-    required int diasGracia,
+    DateTime? fechaReferencia,
   }) {
-    if (!porcentajeMora.isFinite || porcentajeMora < 0) {
+    if (prestamo.diasGraciaMora < 0) {
       throw ArgumentError.value(
-        porcentajeMora,
-        'porcentajeMora',
-        'Debe ser un valor finito no negativo.',
+        prestamo.diasGraciaMora,
+        'diasGraciaMora',
+        'No puede ser negativo.',
       );
     }
-    if (diasGracia <= 0) {
-      throw ArgumentError.value(
-        diasGracia,
-        'diasGracia',
-        'Debe ser mayor que cero.',
+    if (!prestamo.valorRecargoMora.isFinite ||
+        prestamo.valorRecargoMora < 0 ||
+        !const {
+          'PORCENTAJE',
+          'MONTO_FIJO',
+        }.contains(prestamo.tipoRecargoMora)) {
+      throw ArgumentError(
+        'La regla de recargo por mora del préstamo no es válida.',
       );
     }
-    if (calcularDiasAtraso(cuota.fechaVencimiento) < diasGracia) return 0;
-    final penalizacion = cuota.montoCuota * porcentajeMora / 100;
-    return MonedaColombiana.esMultiploDeUnidad(cuota.montoCuota)
-        ? MonedaColombiana.redondearAUnidad(penalizacion)
-        : _redondearDosDecimales(penalizacion);
+    final diasAtraso = calcularDiasAtraso(
+      cuota.fechaVencimiento,
+      fechaReferencia: fechaReferencia,
+    );
+    if (diasAtraso < prestamo.diasGraciaMora || diasAtraso == 0) return 0;
+
+    final periodos = prestamo.recargoAcumulable
+        ? (prestamo.diasGraciaMora == 0
+              ? diasAtraso
+              : diasAtraso ~/ prestamo.diasGraciaMora)
+        : 1;
+    final cuotaBase = cuota.montoCuota - cuota.montoPenalizacion;
+    final recargoUnitario = prestamo.tipoRecargoMora == 'MONTO_FIJO'
+        ? prestamo.valorRecargoMora
+        : cuotaBase * prestamo.valorRecargoMora / 100;
+    return recargoUnitario * periodos;
   }
 
   String verificarEstadoCuota(Cuota cuota) {
@@ -78,29 +87,16 @@ class MoraService {
     return 'PENDIENTE';
   }
 
-  Future<List<Cuota>> generarCuotasPenalizacion({
+  Future<double> aplicarMoraCuota({
     required Prestamo prestamo,
-    required int cuotasAtrasadas,
+    required Cuota cuota,
+    DateTime? fechaReferencia,
   }) async {
-    if (cuotasAtrasadas < 0) {
-      throw ArgumentError.value(
-        cuotasAtrasadas,
-        'cuotasAtrasadas',
-        'Los días de atraso no pueden ser negativos.',
-      );
-    }
     if (prestamo.id == null) {
       throw ArgumentError(
         'El préstamo debe estar guardado en la base de datos.',
       );
     }
-
-    if (diasGracia <= 0) {
-      throw StateError('diasGracia debe ser mayor que cero.');
-    }
-    final penalizacionesObjetivo = cuotasAtrasadas ~/ diasGracia;
-    if (penalizacionesObjetivo == 0) return const [];
-
     final db = await _databaseHelper.database;
     return db.transaction((transaction) async {
       final filasPrestamo = await transaction.query(
@@ -115,79 +111,53 @@ class MoraService {
       final prestamoActual = Prestamo.fromMap(filasPrestamo.first);
       if (prestamoActual.estado == 'PAGADO' ||
           prestamoActual.estado == 'CANCELADO') {
-        return const [];
+        return 0.0;
       }
-
-      final filasCuotas = await transaction.query(
+      final filasCuota = await transaction.query(
         DbConstants.tableCuotas,
-        where: 'prestamo_id = ?',
-        whereArgs: [prestamo.id],
-        orderBy: 'numero_cuota ASC',
+        where:
+            '${DbConstants.columnId} = ? AND '
+            '${DbConstants.cuotaPrestamoId} = ?',
+        whereArgs: [cuota.id, prestamo.id],
+        limit: 1,
       );
-      final cuotas = filasCuotas.map(Cuota.fromMap).toList();
-      final cantidadExistente = cuotas
-          .where((cuota) => cuota.esPenalizacion)
-          .length;
-      final cantidadNueva = penalizacionesObjetivo - cantidadExistente;
-      if (cantidadNueva <= 0) return const [];
-
-      final ultimaFecha = cuotas.isEmpty
-          ? prestamoActual.fechaFinEstimada
-          : cuotas
-                .map((cuota) => cuota.fechaVencimiento)
-                .reduce((a, b) => a.isAfter(b) ? a : b);
-      final diasPersonalizados = prestamoActual.diasPersonalizados
-          ?.split(',')
-          .map((dia) => int.tryParse(dia.trim()))
-          .whereType<int>()
-          .toList();
-      final fechas = _calculadora.generarFechasPago(
-        fechaInicio: ultimaFecha,
-        numCuotas: cantidadNueva,
-        frecuencia: prestamoActual.frecuencia,
-        diasPersonalizados: diasPersonalizados,
-      );
-      final primerNumero =
-          cuotas.fold<int>(
-            0,
-            (maximo, cuota) =>
-                cuota.numeroCuota > maximo ? cuota.numeroCuota : maximo,
-          ) +
-          1;
-      final nuevasCuotas = <Cuota>[];
-      final batch = transaction.batch();
-
-      for (var indice = 0; indice < cantidadNueva; indice++) {
-        final cuota = Cuota(
-          prestamoId: prestamo.id!,
-          numeroCuota: primerNumero + indice,
-          fechaVencimiento: fechas[indice],
-          montoCuota: prestamoActual.valorCuota,
-          esPenalizacion: true,
-        );
-        batch.insert(DbConstants.tableCuotas, cuota.toMap());
-        nuevasCuotas.add(cuota);
+      if (filasCuota.isEmpty) {
+        throw StateError('La cuota no pertenece al préstamo indicado.');
       }
-      await batch.commit(noResult: true);
-
-      final montoAgregado = prestamoActual.valorCuota * cantidadNueva;
-      final nuevoSaldo = prestamoActual.saldoPendiente + montoAgregado;
-      final nuevaFechaFin = fechas.last;
+      final cuotaActual = Cuota.fromMap(filasCuota.first);
+      if (cuotaActual.estado == 'PAGADA' ||
+          cuotaActual.montoPagado >= cuotaActual.montoCuota) {
+        return 0.0;
+      }
+      final recargoObjetivo = calcularPenalizacionMora(
+        prestamo: prestamoActual,
+        cuota: cuotaActual,
+        fechaReferencia: fechaReferencia,
+      );
+      final montoAgregado = recargoObjetivo - cuotaActual.montoPenalizacion;
+      if (montoAgregado <= 0) return 0.0;
+      await transaction.update(
+        DbConstants.tableCuotas,
+        {
+          DbConstants.cuotaMonto: cuotaActual.montoCuota + montoAgregado,
+          DbConstants.cuotaMontoPenalizacion: recargoObjetivo,
+        },
+        where: '${DbConstants.columnId} = ?',
+        whereArgs: [cuotaActual.id],
+      );
       await transaction.update(
         DbConstants.tablePrestamos,
         {
-          DbConstants.prestamoNumCuotas:
-              prestamoActual.numCuotas + cantidadNueva,
           DbConstants.prestamoMontoTotalPagar:
               prestamoActual.montoTotalPagar + montoAgregado,
-          DbConstants.prestamoSaldoPendiente: nuevoSaldo,
-          DbConstants.prestamoFechaFinEstimada: nuevaFechaFin.toIso8601String(),
+          DbConstants.prestamoSaldoPendiente:
+              prestamoActual.saldoPendiente + montoAgregado,
           DbConstants.prestamoEstado: 'MORA',
         },
-        where: 'id = ?',
+        where: '${DbConstants.columnId} = ?',
         whereArgs: [prestamo.id],
       );
-      return nuevasCuotas;
+      return montoAgregado;
     });
   }
 
@@ -229,7 +199,4 @@ class MoraService {
 
   static DateTime _soloFecha(DateTime fecha) =>
       DateTime(fecha.year, fecha.month, fecha.day);
-
-  static double _redondearDosDecimales(double valor) =>
-      (valor * 100).roundToDouble() / 100;
 }

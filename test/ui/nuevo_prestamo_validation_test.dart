@@ -5,7 +5,7 @@ import 'package:flutter_prestamos/logic/providers/gota_provider.dart';
 import 'package:flutter_prestamos/ui/screens/prestamos/nuevo_prestamo_screen.dart';
 
 void main() {
-  testWidgets('permite excluir domingos y festivos del calendario de cuotas', (
+  testWidgets('permite elegir días corridos o desplazar festivos', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -17,13 +17,15 @@ void main() {
 
     final selector = find.byType(SwitchListTile);
     expect(selector, findsOneWidget);
-    expect(tester.widget<SwitchListTile>(selector).value, isTrue);
+    expect(find.textContaining('Fecha de inicio ·'), findsOneWidget);
+    expect(find.text('Días corridos'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(selector).value, isFalse);
 
     await tester.ensureVisible(selector);
     await tester.tap(selector);
     await tester.pumpAndSettle();
 
-    expect(tester.widget<SwitchListTile>(selector).value, isFalse);
+    expect(tester.widget<SwitchListTile>(selector).value, isTrue);
   });
 
   testWidgets('valida capital, interés y cuotas con los límites QA', (

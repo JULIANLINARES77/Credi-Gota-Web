@@ -12,6 +12,7 @@ import '../../data/models/cliente.dart';
 import '../../data/models/cuota.dart';
 import '../../data/models/prestamo.dart';
 import '../../logic/providers/gota_provider.dart';
+import '../../logic/services/mora_service.dart';
 import '../../logic/services/notificacion_service.dart';
 
 class PaymentBottomSheet extends StatefulWidget {
@@ -50,14 +51,16 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   String _metodo = 'EFECTIVO';
   String? _error;
   bool _guardando = false;
+  bool _montoEditado = false;
 
   @override
   void initState() {
     super.initState();
     final saldo = widget.cuota.montoCuota - widget.cuota.montoPagado;
+    final moraAdicional = _moraAdicional;
     // Formatear con separadores de miles igual que MilesInputFormatter
     _montoController = TextEditingController(
-      text: _formatearMiles(saldo.round().toString()),
+      text: _formatearMiles((saldo + moraAdicional).round().toString()),
     );
   }
 
@@ -81,6 +84,18 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     final limpio = texto.replaceAll('.', '').replaceAll(',', '').trim();
     if (limpio.isEmpty) return null;
     return double.tryParse(limpio);
+  }
+
+  double _moraAdicionalPara(DateTime fechaReferencia) {
+    final recargoObjetivo = MoraService().calcularPenalizacionMora(
+      prestamo: widget.prestamo,
+      cuota: widget.cuota,
+      fechaReferencia: fechaReferencia,
+    );
+    return (recargoObjetivo - widget.cuota.montoPenalizacion).clamp(
+      0.0,
+      double.infinity,
+    );
   }
 
   @override
@@ -122,6 +137,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
             const SizedBox(height: 18),
             TextField(
               controller: _montoController,
+              onChanged: (_) => _montoEditado = true,
               keyboardType: TextInputType.number,
               inputFormatters: [
                 LengthLimitingTextInputFormatter(15),
@@ -134,6 +150,15 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
                     'Saldo de esta cuota: ${GotaDateUtils.formatearMoneda(widget.cuota.montoCuota - widget.cuota.montoPagado)}',
               ),
             ),
+            if (_moraAdicional > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Mora configurada que se agrega al confirmar: '
+                  '${GotaDateUtils.formatearMoneda(_moraAdicional)}',
+                  style: const TextStyle(color: AppColors.warning),
+                ),
+              ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _elegirFecha,
@@ -185,6 +210,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
     );
   }
 
+  double get _moraAdicional => _moraAdicionalPara(_fecha);
+
   Future<void> _elegirFecha() async {
     final seleccion = await showDatePicker(
       context: context,
@@ -192,7 +219,17 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       firstDate: DateTime(2020),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (seleccion != null && mounted) setState(() => _fecha = seleccion);
+    if (seleccion != null && mounted) {
+      setState(() {
+        _fecha = seleccion;
+        if (!_montoEditado) {
+          final saldo = widget.cuota.montoCuota - widget.cuota.montoPagado;
+          _montoController.text = _formatearMiles(
+            (saldo + _moraAdicional).round().toString(),
+          );
+        }
+      });
+    }
   }
 
   Future<void> _confirmar() async {
@@ -205,9 +242,14 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
 
     final prestamo = widget.prestamo;
     final cuota = widget.cuota;
-    if (MonedaColombiana.esMultiploDeUnidad(cuota.montoCuota) &&
+    final saldoTotal = cuota.montoCuota - cuota.montoPagado + _moraAdicional;
+    if (MonedaColombiana.esMultiploDeUnidad(saldoTotal) &&
         !MonedaColombiana.esMultiploDeUnidad(monto)) {
       setState(() => _error = 'El pago debe ser múltiplo de \$1.000.');
+      return;
+    }
+    if (monto > saldoTotal + 0.000001) {
+      setState(() => _error = 'El pago no puede superar el saldo pendiente.');
       return;
     }
     if (prestamo.id == null || cuota.id == null) {
@@ -225,6 +267,11 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       final messenger = ScaffoldMessenger.of(context);
       final navigator = Navigator.of(context);
 
+      await provider.aplicarMoraCuota(
+        prestamoId: prestamo.id!,
+        cuotaId: cuota.id!,
+        fechaReferencia: _fecha,
+      );
       await provider.registrarPago(
         prestamoId: prestamo.id!,
         cuotaId: cuota.id!,

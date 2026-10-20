@@ -11,6 +11,7 @@ import '../../../data/models/prestamo.dart';
 import '../../../logic/providers/gota_provider.dart';
 import '../../../logic/services/calculadora_service.dart';
 import '../../../logic/services/notificacion_service.dart';
+import '../../widgets/cliente_form_dialog.dart';
 import '../../widgets/resumen_card.dart';
 import 'prestamos_cliente_screen.dart';
 
@@ -29,7 +30,8 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
   final _calculadora = const CalculadoraService();
   Timer? _debounce;
   bool _creandoPrestamo = false;
-  bool _saltarFestivos = true;
+  bool _diasCorridos = false;
+  DateTime _fechaInicio = DateTime.now();
   int? _clienteId;
   String _frecuencia = CalculadoraService.frecuenciaLunesMiercolesViernes;
   final Set<int> _dias = {DateTime.monday, DateTime.wednesday, DateTime.friday};
@@ -38,6 +40,7 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
     CalculadoraService.frecuenciaDiaria: 'Diaria',
     CalculadoraService.frecuenciaSemanal: 'Semanal',
     CalculadoraService.frecuenciaQuincenal: 'Quincenal',
+    CalculadoraService.frecuenciaMensual: 'Mensual',
     CalculadoraService.frecuenciaLunesMiercolesViernes:
         'Lunes, miércoles y viernes',
     CalculadoraService.frecuenciaPersonalizada: 'Días personalizados',
@@ -203,14 +206,24 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
                       setState(() => _frecuencia = valor ?? _frecuencia),
                 ),
                 const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _elegirFechaInicio,
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: Text(
+                    'Fecha de inicio · '
+                    '${GotaDateUtils.formatearFecha(_fechaInicio)}',
+                  ),
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Evitar domingos y festivos colombianos'),
-                  subtitle: const Text(
-                    'Las cuotas pasarán al siguiente día disponible.',
+                  title: const Text('Días corridos'),
+                  subtitle: Text(
+                    _diasCorridos
+                        ? 'Incluye domingos y festivos colombianos.'
+                        : 'Las cuotas pasan al siguiente día hábil si caen en fin de semana o festivo.',
                   ),
-                  value: _saltarFestivos,
-                  onChanged: (valor) => setState(() => _saltarFestivos = valor),
+                  value: _diasCorridos,
+                  onChanged: (valor) => setState(() => _diasCorridos = valor),
                 ),
                 if (_frecuencia ==
                     CalculadoraService.frecuenciaPersonalizada) ...[
@@ -262,10 +275,12 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ResumenCard(
-                              titulo: calculo.valorCuota == calculo.valorCuotaMaxima
+                              titulo:
+                                  calculo.valorCuota == calculo.valorCuotaMaxima
                                   ? 'Valor de cuota'
                                   : 'Cuotas entre',
-                              valor: calculo.valorCuota == calculo.valorCuotaMaxima
+                              valor:
+                                  calculo.valorCuota == calculo.valorCuotaMaxima
                                   ? GotaDateUtils.formatearMoneda(
                                       calculo.valorCuota,
                                     )
@@ -434,14 +449,14 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
     }
     try {
       return _calculadora.generarFechasPago(
-        fechaInicio: DateTime.now(),
+        fechaInicio: _fechaInicio,
         numCuotas: cantidad,
         frecuencia: _frecuencia,
         diasPersonalizados:
             _frecuencia == CalculadoraService.frecuenciaPersonalizada
             ? _dias.toList()
             : null,
-        saltarFestivos: _saltarFestivos,
+        diasCorridos: _diasCorridos,
       );
     } on Object {
       return null;
@@ -481,11 +496,12 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
         porcentajeInteres: _parsear(_interes.text)!,
         numCuotas: int.parse(_cuotas.text),
         frecuencia: _frecuencia,
+        fechaInicio: _fechaInicio,
         diasPersonalizados:
             _frecuencia == CalculadoraService.frecuenciaPersonalizada
             ? _dias.toList()
             : null,
-        saltarFestivos: _saltarFestivos,
+        diasCorridos: _diasCorridos,
       );
     } on Object catch (error) {
       if (!mounted) return;
@@ -535,78 +551,50 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
     }
   }
 
-  Future<void> _crearClienteRapido() async {
-    final nombre = TextEditingController();
-    final telefono = TextEditingController();
-
-    try {
-      final confirmado = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Nuevo cliente'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nombre,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Nombre'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: telefono,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Teléfono'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Guardar'),
-            ),
-          ],
+  Future<void> _elegirFechaInicio() async {
+    final hoy = DateTime.now();
+    final seleccion = await showDatePicker(
+      context: context,
+      initialDate: _fechaInicio,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(hoy.year, hoy.month, hoy.day),
+    );
+    if (seleccion != null && mounted) {
+      setState(
+        () => _fechaInicio = DateTime(
+          seleccion.year,
+          seleccion.month,
+          seleccion.day,
         ),
       );
+    }
+  }
 
+  Future<void> _crearClienteRapido() async {
+    final datos = await mostrarClienteFormDialog(context);
+    if (datos == null || !mounted) return;
+
+    try {
+      final cliente = await context.read<GotaProvider>().agregarCliente(
+        nombre: datos.nombre,
+        telefono: datos.telefono,
+        cedula: datos.cedula,
+        direccion: datos.direccion,
+      );
       if (!mounted) return;
-      if (confirmado != true) return;
-
-      if (nombre.text.trim().isEmpty || telefono.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nombre y teléfono son obligatorios.')),
-        );
-        return;
-      }
-
-      try {
-        final demo = context.read<GotaProvider>();
-        await demo.agregarCliente(nombre: nombre.text, telefono: telefono.text);
-        if (!mounted) return;
-        final ultimo = demo.clientes.isEmpty ? null : demo.clientes.last.id;
-        if (ultimo != null) {
-          setState(() => _clienteId = ultimo);
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cliente guardado correctamente.')),
-        );
-      } on Object catch (error) {
-        if (!mounted) return;
-        final mensaje = error
-            .toString()
-            .replaceFirst('ArgumentError: ', '')
-            .replaceFirst('StateError: ', '');
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(mensaje)));
-      }
-    } finally {
-      nombre.dispose();
-      telefono.dispose();
+      setState(() => _clienteId = cliente.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cliente guardado correctamente.')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      final mensaje = error
+          .toString()
+          .replaceFirst('ArgumentError: ', '')
+          .replaceFirst('StateError: ', '');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
     }
   }
 }

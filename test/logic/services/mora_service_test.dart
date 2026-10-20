@@ -1,9 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_prestamos/data/models/cuota.dart';
+import 'package:flutter_prestamos/data/models/prestamo.dart';
 import 'package:flutter_prestamos/logic/services/mora_service.dart';
 
 void main() {
   final mora = MoraService(reloj: () => DateTime(2026, 10, 10, 15));
+  final prestamoPorcentual = Prestamo(
+    clienteId: 1,
+    montoCapital: 100000,
+    porcentajeInteres: 0,
+    montoInteres: 0,
+    montoTotalPagar: 100000,
+    numCuotas: 2,
+    valorCuota: 50000,
+    frecuencia: 'DIARIA',
+    fechaInicio: DateTime(2026, 10, 1),
+    fechaFinEstimada: DateTime(2026, 10, 2),
+    saldoPendiente: 100000,
+    createdAt: DateTime(2026, 10, 1),
+  );
   final cuotaBase = Cuota(
     prestamoId: 1,
     numeroCuota: 1,
@@ -19,19 +34,64 @@ void main() {
   test('aplica porcentaje de mora al completar los días de gracia', () {
     expect(
       mora.calcularPenalizacionMora(
+        prestamo: prestamoPorcentual,
         cuota: cuotaBase,
-        porcentajeMora: 10,
-        diasGracia: 3,
       ),
       5000,
     );
     expect(
       mora.calcularPenalizacionMora(
+        prestamo: prestamoPorcentual,
         cuota: cuotaBase.copyWith(fechaVencimiento: DateTime(2026, 10, 8)),
-        porcentajeMora: 10,
-        diasGracia: 3,
       ),
       0,
+    );
+  });
+
+  test('calcula mora con la fecha histórica seleccionada para el pago', () {
+    expect(
+      mora.calcularPenalizacionMora(
+        prestamo: prestamoPorcentual,
+        cuota: cuotaBase,
+        fechaReferencia: DateTime(2026, 10, 8),
+      ),
+      0,
+    );
+    expect(
+      mora.calcularPenalizacionMora(
+        prestamo: prestamoPorcentual,
+        cuota: cuotaBase,
+        fechaReferencia: DateTime(2026, 10, 10),
+      ),
+      5000,
+    );
+  });
+
+  test('monto fijo es independiente del valor de cuota', () {
+    final prestamoFijo = prestamoPorcentual.copyWith(
+      diasGraciaMora: 0,
+      tipoRecargoMora: 'MONTO_FIJO',
+      valorRecargoMora: 5000,
+    );
+    expect(
+      mora.calcularPenalizacionMora(
+        prestamo: prestamoFijo,
+        cuota: cuotaBase.copyWith(montoCuota: 900000),
+      ),
+      5000,
+    );
+  });
+
+  test('el recargo acumulable se cobra por cada bloque completo de gracia', () {
+    final prestamoAcumulable = prestamoPorcentual.copyWith(
+      recargoAcumulable: true,
+    );
+    expect(
+      mora.calcularPenalizacionMora(
+        prestamo: prestamoAcumulable,
+        cuota: cuotaBase.copyWith(fechaVencimiento: DateTime(2026, 10, 4)),
+      ),
+      10000,
     );
   });
 

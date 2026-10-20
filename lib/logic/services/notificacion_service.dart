@@ -155,12 +155,19 @@ class NotificacionService {
     };
     final candidatas = <_AlertaCuotaPendiente>[];
     final ahora = tz.TZDateTime.now(tz.local);
+    final idsMoraActiva = <int>{};
+    final prestamosPorId = {
+      for (final prestamo in prestamos)
+        if (prestamo.id != null) prestamo.id!: prestamo,
+    };
 
     for (final cuota in cuotas) {
       final cuotaId = cuota.id;
       final nombreCliente = nombresPorPrestamo[cuota.prestamoId];
+      final prestamo = prestamosPorId[cuota.prestamoId];
       final saldo = cuota.montoCuota - cuota.montoPagado;
       if (cuotaId == null ||
+          prestamo == null ||
           !prestamosActivos.contains(cuota.prestamoId) ||
           nombreCliente == null ||
           cuota.estado == 'PAGADA' ||
@@ -181,8 +188,9 @@ class NotificacionService {
       }
 
       if (alertasMora) {
+        final diasGracia = prestamo.diasGraciaMora;
         final fechaMora = _fechaALasOcho(
-          cuota.fechaVencimiento.add(const Duration(days: 3)),
+          cuota.fechaVencimiento.add(Duration(days: diasGracia)),
         );
         if (fechaMora.isAfter(ahora)) {
           final id = _idCuota(cuotaId, 1);
@@ -190,9 +198,13 @@ class NotificacionService {
             id: id,
             fecha: fechaMora,
             titulo: 'Cuota en mora',
-            mensaje: '$nombreCliente tiene una cuota vencida hace 3 días.',
+            mensaje:
+                '$nombreCliente tiene una cuota vencida fuera de sus '
+                '$diasGracia días de gracia.',
             payload: 'mora:$cuotaId',
           ));
+        } else {
+          idsMoraActiva.add(_idCuota(cuotaId, 1));
         }
       }
     }
@@ -214,6 +226,23 @@ class NotificacionService {
         titulo: alerta.titulo,
         mensaje: alerta.mensaje,
         payload: alerta.payload,
+      );
+    }
+    for (final id in idsMoraActiva) {
+      final cuotaId = (id - 11) ~/ 2;
+      final cuota = cuotas.firstWhere((item) => item.id == cuotaId);
+      final nombreCliente = nombresPorPrestamo[cuota.prestamoId]!;
+      final diasAtraso = ahora
+          .difference(_fechaALasOcho(cuota.fechaVencimiento))
+          .inDays;
+      await _plugin.show(
+        id: id,
+        title: 'Cuota en mora',
+        body:
+            '$nombreCliente tiene una cuota en mora desde hace '
+            '$diasAtraso días. Saldo: ${_formatearPesos(cuota.montoCuota - cuota.montoPagado)}.',
+        notificationDetails: _detalles,
+        payload: 'mora:$cuotaId',
       );
     }
   }
