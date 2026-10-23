@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
@@ -33,13 +36,47 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  static const _alertasLeidasKey = 'dashboard_alertas_leidas';
+  static const _alertasEliminadasKey = 'dashboard_alertas_eliminadas';
   final Set<String> _alertasLeidas = <String>{};
   final Set<String> _alertasEliminadas = <String>{};
+  bool _estadoCargado = false;
 
   String _claveAlerta(int? cuotaId, String tipo) => '$tipo:${cuotaId ?? 0}';
 
   bool _visible(String clave) =>
       !_alertasLeidas.contains(clave) && !_alertasEliminadas.contains(clave);
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarEstadoAlertas();
+  }
+
+  Future<void> _cargarEstadoAlertas() async {
+    final preferencias = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _alertasLeidas
+        ..clear()
+        ..addAll(preferencias.getStringList(_alertasLeidasKey) ?? const []);
+      _alertasEliminadas
+        ..clear()
+        ..addAll(preferencias.getStringList(_alertasEliminadasKey) ?? const []);
+      _estadoCargado = true;
+    });
+  }
+
+  Future<void> _guardarEstadoAlertas() async {
+    final preferencias = await SharedPreferences.getInstance();
+    await Future.wait([
+      preferencias.setStringList(_alertasLeidasKey, _alertasLeidas.toList()),
+      preferencias.setStringList(
+        _alertasEliminadasKey,
+        _alertasEliminadas.toList(),
+      ),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,16 +86,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     final ancho = MediaQuery.sizeOf(context).width;
     final dosColumnas = ancho > 650;
-    final cantidadAlertas =
-        demo.cuotasDeHoy
-            .map((cuota) => _claveAlerta(cuota.id, 'hoy'))
-            .where(_visible)
-            .length +
-        demo.moras
-            .expand((mora) => mora.cuotasAtrasadas)
-            .map((cuota) => _claveAlerta(cuota.id, 'mora'))
-            .where(_visible)
-            .length;
+    final cantidadAlertas = !_estadoCargado
+        ? 0
+        : demo.cuotasDeHoy
+                  .map((cuota) => _claveAlerta(cuota.id, 'hoy'))
+                  .where(_visible)
+                  .length +
+              demo.moras
+                  .expand((mora) => mora.cuotasAtrasadas)
+                  .map((cuota) => _claveAlerta(cuota.id, 'mora'))
+                  .where(_visible)
+                  .length;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -247,6 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ...cuotasDeHoy.map((a) => _claveAlerta(a.cuota.id, 'hoy')),
       ]);
     });
+    unawaited(_guardarEstadoAlertas());
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -343,7 +382,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }) {
     return Dismissible(
       key: ValueKey('alerta-$clave'),
-      direction: DismissDirection.endToStart,
+      direction: DismissDirection.horizontal,
+      confirmDismiss: (_) async => true,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 18),
@@ -352,6 +392,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       onDismissed: (_) {
         setState(() => _alertasEliminadas.add(clave));
+        unawaited(_guardarEstadoAlertas());
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Notificación eliminada'),
@@ -359,6 +400,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               label: 'Deshacer',
               onPressed: () {
                 setState(() => _alertasEliminadas.remove(clave));
+                unawaited(_guardarEstadoAlertas());
               },
             ),
           ),
