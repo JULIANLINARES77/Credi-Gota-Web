@@ -38,6 +38,7 @@ class GotaProvider extends ChangeNotifier {
   String? avisoRespaldoInicio;
 
   bool _disposed = false;
+  bool _sincronizandoMora = false;
 
   @override
   void dispose() {
@@ -167,6 +168,44 @@ class GotaProvider extends ChangeNotifier {
       _resumenDashboard = resumen;
       _configuracion = configuracion;
       _moras = moras;
+
+      if (!_sincronizandoMora) {
+        _sincronizandoMora = true;
+        try {
+          var moraAplicada = false;
+          final servicio = MoraService(
+            databaseHelper: _databaseHelper,
+            reloj: _reloj,
+          );
+          for (final prestamo in prestamos) {
+            final id = prestamo.id;
+            if (id == null ||
+                (prestamo.estado != 'ACTIVO' && prestamo.estado != 'MORA')) {
+              continue;
+            }
+            for (final cuota in cuotasPorPrestamo[id] ?? const <Cuota>[]) {
+              if (cuota.estado == 'PAGADA' ||
+                  !_soloFecha(
+                    cuota.fechaVencimiento,
+                  ).isBefore(_soloFecha(_reloj()))) {
+                continue;
+              }
+              final aplicado = await servicio.aplicarMoraCuota(
+                prestamo: prestamo,
+                cuota: cuota,
+                fechaReferencia: _reloj(),
+              );
+              moraAplicada = moraAplicada || aplicado > 0;
+            }
+          }
+          if (moraAplicada) {
+            await cargarDatos(mostrarCarga: false);
+            return;
+          }
+        } finally {
+          _sincronizandoMora = false;
+        }
+      }
     } on Object catch (error, stackTrace) {
       errorCarga = error.toString();
       debugPrint('GotaControl: error cargando SQLite: $error\n$stackTrace');

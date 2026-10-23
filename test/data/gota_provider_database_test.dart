@@ -382,7 +382,7 @@ void main() {
     await provider.registrarPago(
       prestamoId: prestamo.id!,
       cuotaId: cuota.id!,
-      monto: 10000,
+      monto: 11000,
       metodoPago: 'EFECTIVO',
       fecha: fechaPago,
     );

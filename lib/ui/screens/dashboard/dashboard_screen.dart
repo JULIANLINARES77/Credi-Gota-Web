@@ -14,7 +14,7 @@ import '../../widgets/payment_bottom_sheet.dart';
 import '../../widgets/resumen_card.dart';
 import '../prestamos/prestamo_detail_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     super.key,
     required this.onNuevoPrestamo,
@@ -29,6 +29,19 @@ class DashboardScreen extends StatelessWidget {
   final VoidCallback onPrestamos;
 
   @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final Set<String> _alertasLeidas = <String>{};
+  final Set<String> _alertasEliminadas = <String>{};
+
+  String _claveAlerta(int? cuotaId, String tipo) => '$tipo:${cuotaId ?? 0}';
+
+  bool _visible(String clave) =>
+      !_alertasLeidas.contains(clave) && !_alertasEliminadas.contains(clave);
+
+  @override
   Widget build(BuildContext context) {
     final demo = context.watch<GotaProvider>();
     if (demo.cargando) {
@@ -37,11 +50,15 @@ class DashboardScreen extends StatelessWidget {
     final ancho = MediaQuery.sizeOf(context).width;
     final dosColumnas = ancho > 650;
     final cantidadAlertas =
-        demo.cuotasDeHoy.length +
-        demo.moras.fold<int>(
-          0,
-          (total, mora) => total + mora.cuotasAtrasadas.length,
-        );
+        demo.cuotasDeHoy
+            .map((cuota) => _claveAlerta(cuota.id, 'hoy'))
+            .where(_visible)
+            .length +
+        demo.moras
+            .expand((mora) => mora.cuotasAtrasadas)
+            .map((cuota) => _claveAlerta(cuota.id, 'mora'))
+            .where(_visible)
+            .length;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -81,7 +98,7 @@ class DashboardScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'dashboard-new-loan',
-        onPressed: onNuevoPrestamo,
+        onPressed: widget.onNuevoPrestamo,
         icon: const Icon(Icons.add),
         label: const Text('Nuevo préstamo'),
         backgroundColor: AppColors.primary,
@@ -115,7 +132,7 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               GridView.count(
-                crossAxisCount: dosColumnas ? 2 : 2,
+                crossAxisCount: 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 10,
@@ -141,9 +158,9 @@ class DashboardScreen extends StatelessWidget {
                 clientes: demo.clientesActivos,
                 enMora: demo.clientesEnMora,
                 prestamos: demo.prestamosActivos.length,
-                onClientes: onClientes,
-                onMora: onMora,
-                onPrestamos: onPrestamos,
+                onClientes: widget.onClientes,
+                onMora: widget.onMora,
+                onPrestamos: widget.onPrestamos,
               ),
               const SizedBox(height: 26),
               _TituloSeccion(
@@ -151,7 +168,7 @@ class DashboardScreen extends StatelessWidget {
                 contador: demo.cuotasDeHoy.length,
                 trailing: IconButton(
                   tooltip: 'Ver lista de clientes',
-                  onPressed: onPrestamos,
+                  onPressed: widget.onPrestamos,
                   icon: const Icon(Icons.arrow_forward),
                 ),
               ),
@@ -168,7 +185,7 @@ class DashboardScreen extends StatelessWidget {
                 contador: demo.moras.length,
                 trailing: IconButton(
                   tooltip: 'Ver clientes en mora',
-                  onPressed: onMora,
+                  onPressed: widget.onMora,
                   icon: const Icon(Icons.arrow_forward),
                 ),
               ),
@@ -201,10 +218,7 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  static void _mostrarNotificaciones(
-    BuildContext context,
-    GotaProvider provider,
-  ) {
+  void _mostrarNotificaciones(BuildContext context, GotaProvider provider) {
     final cuotasVencidas =
         <({Prestamo prestamo, Cliente cliente, Cuota cuota})>[];
     for (final mora in provider.moras) {
@@ -227,6 +241,12 @@ class DashboardScreen extends StatelessWidget {
       }
     }
 
+    setState(() {
+      _alertasLeidas.addAll([
+        ...cuotasVencidas.map((a) => _claveAlerta(a.cuota.id, 'mora')),
+        ...cuotasDeHoy.map((a) => _claveAlerta(a.cuota.id, 'hoy')),
+      ]);
+    });
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -261,18 +281,17 @@ class DashboardScreen extends StatelessWidget {
                     style: Theme.of(sheetContext).textTheme.titleMedium,
                   ),
                   ...cuotasVencidas.map(
-                    (alerta) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.warning_amber_rounded,
-                        color: AppColors.warning,
-                      ),
-                      title: Text(alerta.cliente.nombre),
-                      subtitle: Text(
-                        'Cuota ${alerta.cuota.numeroCuota} · venció '
-                        '${GotaDateUtils.formatearFecha(alerta.cuota.fechaVencimiento)} · '
-                        '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
-                      ),
+                    (alerta) => _alertaDeslizable(
+                      context: context,
+                      sheetContext: sheetContext,
+                      clave: _claveAlerta(alerta.cuota.id, 'mora'),
+                      titulo: alerta.cliente.nombre,
+                      icono: Icons.warning_amber_rounded,
+                      color: AppColors.warning,
+                      subtitulo:
+                          'Cuota ${alerta.cuota.numeroCuota} · venció '
+                          '${GotaDateUtils.formatearFecha(alerta.cuota.fechaVencimiento)} · '
+                          '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
                       onTap: () {
                         Navigator.of(sheetContext).pop();
                         _abrirDetalle(context, alerta.prestamo);
@@ -287,17 +306,16 @@ class DashboardScreen extends StatelessWidget {
                     style: Theme.of(sheetContext).textTheme.titleMedium,
                   ),
                   ...cuotasDeHoy.map(
-                    (alerta) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.event_available_outlined,
-                        color: AppColors.blue,
-                      ),
-                      title: Text(alerta.cliente.nombre),
-                      subtitle: Text(
-                        'Cuota ${alerta.cuota.numeroCuota} · '
-                        '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
-                      ),
+                    (alerta) => _alertaDeslizable(
+                      context: context,
+                      sheetContext: sheetContext,
+                      clave: _claveAlerta(alerta.cuota.id, 'hoy'),
+                      titulo: alerta.cliente.nombre,
+                      icono: Icons.event_available_outlined,
+                      color: AppColors.blue,
+                      subtitulo:
+                          'Cuota ${alerta.cuota.numeroCuota} · '
+                          '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
                       onTap: () {
                         Navigator.of(sheetContext).pop();
                         _abrirDetalle(context, alerta.prestamo);
@@ -309,6 +327,49 @@ class DashboardScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _alertaDeslizable({
+    required BuildContext context,
+    required BuildContext sheetContext,
+    required String clave,
+    required String titulo,
+    required String subtitulo,
+    required IconData icono,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Dismissible(
+      key: ValueKey('alerta-$clave'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 18),
+        color: AppColors.error,
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      onDismissed: (_) {
+        setState(() => _alertasEliminadas.add(clave));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Notificación eliminada'),
+            action: SnackBarAction(
+              label: 'Deshacer',
+              onPressed: () {
+                setState(() => _alertasEliminadas.remove(clave));
+              },
+            ),
+          ),
+        );
+      },
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(icono, color: color),
+        title: Text(titulo),
+        subtitle: Text(subtitulo),
+        onTap: onTap,
       ),
     );
   }
@@ -331,7 +392,7 @@ class _CobroDeHoy extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       color: AppColors.surface,
       child: ListTile(
-        onTap: () => DashboardScreen._abrirDetalle(context, prestamo),
+        onTap: () => _DashboardScreenState._abrirDetalle(context, prestamo),
         leading: CircleAvatar(
           backgroundColor: AppColors.warning.withValues(alpha: 0.15),
           child: const Icon(Icons.person_outline, color: AppColors.warning),

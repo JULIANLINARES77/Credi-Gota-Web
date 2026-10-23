@@ -242,16 +242,6 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
 
     final prestamo = widget.prestamo;
     final cuota = widget.cuota;
-    final saldoTotal = cuota.montoCuota - cuota.montoPagado + _moraAdicional;
-    if (MonedaColombiana.esMultiploDeUnidad(saldoTotal) &&
-        !MonedaColombiana.esMultiploDeUnidad(monto)) {
-      setState(() => _error = 'El pago debe ser múltiplo de \$1.000.');
-      return;
-    }
-    if (monto > saldoTotal + 0.000001) {
-      setState(() => _error = 'El pago no puede superar el saldo pendiente.');
-      return;
-    }
     if (prestamo.id == null || cuota.id == null) {
       setState(() => _error = 'Datos del préstamo incompletos.');
       return;
@@ -272,6 +262,19 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
         cuotaId: cuota.id!,
         fechaReferencia: _fecha,
       );
+      final cuotaActualizada = provider
+          .cuotasDePrestamo(prestamo.id!)
+          .firstWhere((item) => item.id == cuota.id);
+      final saldoTotal =
+          cuotaActualizada.montoCuota - cuotaActualizada.montoPagado;
+      if (MonedaColombiana.esMultiploDeUnidad(saldoTotal) &&
+          !MonedaColombiana.esMultiploDeUnidad(monto)) {
+        throw ArgumentError('El pago debe ser múltiplo de \$1.000.');
+      }
+      if (monto > saldoTotal + 0.000001) {
+        throw ArgumentError('El pago supera el saldo pendiente actualizado.');
+      }
+
       await provider.registrarPago(
         prestamoId: prestamo.id!,
         cuotaId: cuota.id!,

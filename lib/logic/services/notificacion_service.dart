@@ -29,6 +29,7 @@ class NotificacionService {
       FlutterLocalNotificationsPlugin();
   bool _inicializado = false;
   Future<void>? _inicializacion;
+  final Set<int> _moraMostrada = <int>{};
 
   Future<void> inicializarNotificaciones() {
     if (_inicializado) return Future<void>.value();
@@ -49,7 +50,15 @@ class NotificacionService {
         requestSoundPermission: true,
       ),
     );
-    final resultado = await _plugin.initialize(settings: ajustes);
+    final resultado = await _plugin.initialize(
+      settings: ajustes,
+      onDidReceiveNotificationResponse: (response) async {
+        final id = response.id;
+        if (id != null && id != _notificacionDiariaId) {
+          await _plugin.cancel(id: id);
+        }
+      },
+    );
     _inicializado = resultado ?? false;
 
     if (defaultTargetPlatform == TargetPlatform.android) {
@@ -229,6 +238,7 @@ class NotificacionService {
       );
     }
     for (final id in idsMoraActiva) {
+      if (_moraMostrada.contains(id)) continue;
       final cuotaId = (id - 11) ~/ 2;
       final cuota = cuotas.firstWhere((item) => item.id == cuotaId);
       final nombreCliente = nombresPorPrestamo[cuota.prestamoId]!;
@@ -244,6 +254,18 @@ class NotificacionService {
         notificationDetails: _detalles,
         payload: 'mora:$cuotaId',
       );
+      _moraMostrada.add(id);
+    }
+  }
+
+  Future<void> marcarAlertasMoraVistas(Iterable<Cuota> cuotas) async {
+    await _asegurarInicializacion();
+    for (final cuota in cuotas) {
+      final id = cuota.id;
+      if (id == null) continue;
+      final notificationId = _idCuota(id, 1);
+      await _plugin.cancel(id: notificationId);
+      _moraMostrada.add(notificationId);
     }
   }
 

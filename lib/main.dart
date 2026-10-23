@@ -79,6 +79,7 @@ void main() {
           final notificaciones = NotificacionService.instance;
           await notificaciones.inicializarNotificaciones();
           await notificaciones.sincronizarConDatos(provider);
+          await notificaciones.marcarAlertasMoraVistas(provider.todasLasCuotas);
         } on Object catch (error, stackTrace) {
           debugPrint('GotaControl: no se sincronizaron notificaciones: $error');
           debugPrintStack(stackTrace: stackTrace);
@@ -101,11 +102,15 @@ Future<void> _configurarRespaldoEnSegundoPlano(
     if (falloRecuperacionAutomatica ||
         (estadoRespaldo.lastError != null &&
             estadoRespaldo.lastSuccess == null)) {
-      provider.mostrarAvisoRespaldoInicio(
-        'No se pudo validar la copia más reciente. No se programó una '
-        'copia nueva para proteger los respaldos existentes. Revisa '
-        'Ajustes → Respaldo e importa una copia válida.',
+      debugPrint(
+        'GotaControl: respaldo inicial no disponible; se conserva la base '
+        'local y se intentará respaldar en segundo plano: '
+        '${estadoRespaldo.lastError}',
       );
+      final frecuencia = BackupFrequency.fromValue(
+        provider.configuracion?[DbConstants.configuracionFrecuenciaRespaldo],
+      );
+      await LocalBackupService.instance.configureSchedule(frecuencia);
       return;
     }
     final frecuencia = BackupFrequency.fromValue(
