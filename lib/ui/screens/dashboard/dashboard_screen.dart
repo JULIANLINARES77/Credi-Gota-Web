@@ -292,7 +292,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     unawaited(_guardarEstadoAlertas());
     final ocultasEnPanel = <String>{};
-    showModalBottomSheet<void>(
+    String? mensajeEliminacion;
+    VoidCallback? deshacerEliminacion;
+    Timer? temporizadorMensaje;
+
+    void mostrarMensajeEliminacion(
+      String clave,
+      VoidCallback deshacer,
+      void Function(VoidCallback callback) setSheetState,
+    ) {
+      temporizadorMensaje?.cancel();
+      deshacerEliminacion = () {
+        deshacer();
+        setSheetState(() {
+          mensajeEliminacion = null;
+          deshacerEliminacion = null;
+        });
+      };
+      setSheetState(() {
+        mensajeEliminacion = clave;
+      });
+      temporizadorMensaje = Timer(const Duration(seconds: 5), () {
+        setSheetState(() {
+          mensajeEliminacion = null;
+          deshacerEliminacion = null;
+        });
+      });
+    }
+
+    final modal = showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
@@ -331,6 +359,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               '${cuotasDeHoy.length == 1 ? 'cuota para hoy' : 'cuotas para hoy'}',
                     style: const TextStyle(color: AppColors.textSecondary),
                   ),
+                  if (mensajeEliminacion != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Material(
+                        color: Theme.of(
+                          sheetContext,
+                        ).colorScheme.inverseSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Notificación eliminada',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: deshacerEliminacion,
+                                child: const Text('Deshacer'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   if (cuotasVencidas.any(
                     (alerta) =>
                         !_alertasEliminadas.contains(
@@ -372,10 +430,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             onDismissed: () {
                               unawaited(
                                 _eliminarAlertaDelPanel(
-                                  context: context,
                                   clave: _claveAlerta(alerta.cuota.id, 'mora'),
                                   ocultasEnPanel: ocultasEnPanel,
                                   setSheetState: setSheetState,
+                                  mostrarMensaje: (deshacer) =>
+                                      mostrarMensajeEliminacion(
+                                        _claveAlerta(alerta.cuota.id, 'mora'),
+                                        deshacer,
+                                        setSheetState,
+                                      ),
                                 ),
                               );
                             },
@@ -422,10 +485,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             onDismissed: () {
                               unawaited(
                                 _eliminarAlertaDelPanel(
-                                  context: context,
                                   clave: _claveAlerta(alerta.cuota.id, 'hoy'),
                                   ocultasEnPanel: ocultasEnPanel,
                                   setSheetState: setSheetState,
+                                  mostrarMensaje: (deshacer) =>
+                                      mostrarMensajeEliminacion(
+                                        _claveAlerta(alerta.cuota.id, 'hoy'),
+                                        deshacer,
+                                        setSheetState,
+                                      ),
                                 ),
                               );
                             },
@@ -439,34 +507,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+    unawaited(modal.whenComplete(() => temporizadorMensaje?.cancel()));
   }
 
   Future<void> _eliminarAlertaDelPanel({
-    required BuildContext context,
     required String clave,
     required Set<String> ocultasEnPanel,
     required void Function(VoidCallback callback) setSheetState,
+    required void Function(VoidCallback deshacer) mostrarMensaje,
   }) async {
     ocultasEnPanel.add(clave);
     setSheetState(() {});
     setState(() => _alertasEliminadas.add(clave));
-    final messenger = ScaffoldMessenger.of(context);
     await _guardarEstadoAlertas();
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Notificación eliminada'),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'Deshacer',
-          onPressed: () {
-            ocultasEnPanel.remove(clave);
-            setSheetState(() {});
-            setState(() => _alertasEliminadas.remove(clave));
-            unawaited(_guardarEstadoAlertas());
-          },
-        ),
-      ),
-    );
+    mostrarMensaje(() {
+      ocultasEnPanel.remove(clave);
+      setSheetState(() {});
+      setState(() => _alertasEliminadas.remove(clave));
+      unawaited(_guardarEstadoAlertas());
+    });
   }
 
   Widget _alertaDeslizable({

@@ -198,5 +198,11 @@ void main() {
     await tester.tap(find.byTooltip('Notificaciones'));
     await tester.pumpAndSettle();
     expect(find.byType(Dismissible), findsOneWidget);
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Notificación eliminada'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text('Notificación eliminada'), findsNothing);
   });
 }
