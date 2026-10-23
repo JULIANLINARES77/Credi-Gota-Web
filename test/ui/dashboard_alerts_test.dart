@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_prestamos/data/models/cliente.dart';
 import 'package:flutter_prestamos/data/models/cuota.dart';
@@ -73,6 +74,10 @@ class _DashboardProvider extends GotaProvider {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('muestra alertas vencidas y cuotas que vencen hoy', (
     tester,
   ) async {
@@ -123,5 +128,75 @@ void main() {
       find.textContaining('1 cuota vencida · 1 cuota para hoy'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('elimina a ambos lados, muestra deshacer y persiste al reabrir', (
+    tester,
+  ) async {
+    final cliente = Cliente(
+      id: 1,
+      nombre: 'Ana Pérez',
+      telefono: '3000000000',
+      fechaRegistro: DateTime.now(),
+    );
+    final prestamo = Prestamo(
+      id: 1,
+      clienteId: 1,
+      montoCapital: 10000,
+      porcentajeInteres: 0,
+      montoInteres: 0,
+      montoTotalPagar: 22000,
+      numCuotas: 2,
+      valorCuota: 11000,
+      frecuencia: 'SEMANAL',
+      fechaInicio: DateTime.now().subtract(const Duration(days: 8)),
+      fechaFinEstimada: DateTime.now().add(const Duration(days: 8)),
+      saldoPendiente: 22000,
+      createdAt: DateTime.now(),
+    );
+    final provider = _DashboardProvider(cliente: cliente, prestamo: prestamo);
+    addTearDown(provider.dispose);
+
+    Widget app() => ChangeNotifierProvider<GotaProvider>.value(
+      value: provider,
+      child: MaterialApp(
+        home: DashboardScreen(
+          onNuevoPrestamo: () {},
+          onClientes: () {},
+          onMora: () {},
+          onPrestamos: () {},
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Notificaciones'));
+    await tester.pumpAndSettle();
+
+    final primeraAlerta = find.byType(Dismissible).first;
+    await tester.drag(primeraAlerta, const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Notificación eliminada'), findsOneWidget);
+    expect(find.text('Deshacer'), findsOneWidget);
+
+    await tester.tap(find.text('Deshacer'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dismissible), findsNWidgets(2));
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('alerta-mora:1')), findsNothing);
+    expect(find.text('Notificación eliminada'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Cerrar alertas'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Notificaciones'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dismissible), findsOneWidget);
   });
 }
