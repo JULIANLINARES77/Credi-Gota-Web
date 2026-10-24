@@ -331,176 +331,181 @@ class _DashboardScreenState extends State<DashboardScreen> {
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78,
               ),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Alertas',
-                          style: Theme.of(sheetContext).textTheme.titleLarge,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Alertas',
+                            style: Theme.of(sheetContext).textTheme.titleLarge,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar alertas',
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      cuotasVencidas.isEmpty && cuotasDeHoy.isEmpty
+                          ? 'No tienes alertas pendientes.'
+                          : '${cuotasVencidas.length} '
+                                '${cuotasVencidas.length == 1 ? 'cuota vencida' : 'cuotas vencidas'} · '
+                                '${cuotasDeHoy.length} '
+                                '${cuotasDeHoy.length == 1 ? 'cuota para hoy' : 'cuotas para hoy'}',
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
+                    if (mensajeEliminacion != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Material(
+                          color: Theme.of(
+                            sheetContext,
+                          ).colorScheme.inverseSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Notificación eliminada',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: deshacerEliminacion,
+                                  child: const Text('Deshacer'),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Cerrar alertas',
-                        onPressed: () => Navigator.of(sheetContext).pop(),
-                        icon: const Icon(Icons.close),
+                    if (cuotasVencidas.any(
+                      (alerta) =>
+                          !_alertasEliminadas.contains(
+                            _claveAlerta(alerta.cuota.id, 'mora'),
+                          ) &&
+                          !ocultasEnPanel.contains(
+                            _claveAlerta(alerta.cuota.id, 'mora'),
+                          ),
+                    )) ...[
+                      const SizedBox(height: 18),
+                      Text(
+                        'Cuotas vencidas',
+                        style: Theme.of(sheetContext).textTheme.titleMedium,
                       ),
+                      ...cuotasVencidas
+                          .where(
+                            (alerta) =>
+                                !_alertasEliminadas.contains(
+                                  _claveAlerta(alerta.cuota.id, 'mora'),
+                                ) &&
+                                !ocultasEnPanel.contains(
+                                  _claveAlerta(alerta.cuota.id, 'mora'),
+                                ),
+                          )
+                          .map(
+                            (alerta) => _alertaDeslizable(
+                              clave: _claveAlerta(alerta.cuota.id, 'mora'),
+                              titulo: alerta.cliente.nombre,
+                              icono: Icons.warning_amber_rounded,
+                              color: AppColors.warning,
+                              subtitulo:
+                                  'Cuota ${alerta.cuota.numeroCuota} · venció '
+                                  '${GotaDateUtils.formatearFecha(alerta.cuota.fechaVencimiento)} · '
+                                  '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
+                              onTap: () {
+                                Navigator.of(sheetContext).pop();
+                                _abrirDetalle(context, alerta.prestamo);
+                              },
+                              onDismissed: () {
+                                unawaited(
+                                  _eliminarAlertaDelPanel(
+                                    clave: _claveAlerta(
+                                      alerta.cuota.id,
+                                      'mora',
+                                    ),
+                                    ocultasEnPanel: ocultasEnPanel,
+                                    setSheetState: setSheetState,
+                                    mostrarMensaje: (deshacer) =>
+                                        mostrarMensajeEliminacion(
+                                          _claveAlerta(alerta.cuota.id, 'mora'),
+                                          deshacer,
+                                          setSheetState,
+                                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    cuotasVencidas.isEmpty && cuotasDeHoy.isEmpty
-                        ? 'No tienes alertas pendientes.'
-                        : '${cuotasVencidas.length} '
-                              '${cuotasVencidas.length == 1 ? 'cuota vencida' : 'cuotas vencidas'} · '
-                              '${cuotasDeHoy.length} '
-                              '${cuotasDeHoy.length == 1 ? 'cuota para hoy' : 'cuotas para hoy'}',
-                    style: const TextStyle(color: AppColors.textSecondary),
-                  ),
-                  if (mensajeEliminacion != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Material(
-                        color: Theme.of(
-                          sheetContext,
-                        ).colorScheme.inverseSurface,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
+                    if (cuotasDeHoy.any(
+                      (alerta) =>
+                          !_alertasEliminadas.contains(
+                            _claveAlerta(alerta.cuota.id, 'hoy'),
+                          ) &&
+                          !ocultasEnPanel.contains(
+                            _claveAlerta(alerta.cuota.id, 'hoy'),
                           ),
-                          child: Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Notificación eliminada',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: deshacerEliminacion,
-                                child: const Text('Deshacer'),
-                              ),
-                            ],
-                          ),
-                        ),
+                    )) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Cuotas para hoy',
+                        style: Theme.of(sheetContext).textTheme.titleMedium,
                       ),
-                    ),
-                  if (cuotasVencidas.any(
-                    (alerta) =>
-                        !_alertasEliminadas.contains(
-                          _claveAlerta(alerta.cuota.id, 'mora'),
-                        ) &&
-                        !ocultasEnPanel.contains(
-                          _claveAlerta(alerta.cuota.id, 'mora'),
-                        ),
-                  )) ...[
-                    const SizedBox(height: 18),
-                    Text(
-                      'Cuotas vencidas',
-                      style: Theme.of(sheetContext).textTheme.titleMedium,
-                    ),
-                    ...cuotasVencidas
-                        .where(
-                          (alerta) =>
-                              !_alertasEliminadas.contains(
-                                _claveAlerta(alerta.cuota.id, 'mora'),
-                              ) &&
-                              !ocultasEnPanel.contains(
-                                _claveAlerta(alerta.cuota.id, 'mora'),
-                              ),
-                        )
-                        .map(
-                          (alerta) => _alertaDeslizable(
-                            clave: _claveAlerta(alerta.cuota.id, 'mora'),
-                            titulo: alerta.cliente.nombre,
-                            icono: Icons.warning_amber_rounded,
-                            color: AppColors.warning,
-                            subtitulo:
-                                'Cuota ${alerta.cuota.numeroCuota} · venció '
-                                '${GotaDateUtils.formatearFecha(alerta.cuota.fechaVencimiento)} · '
-                                '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
-                            onTap: () {
-                              Navigator.of(sheetContext).pop();
-                              _abrirDetalle(context, alerta.prestamo);
-                            },
-                            onDismissed: () {
-                              unawaited(
-                                _eliminarAlertaDelPanel(
-                                  clave: _claveAlerta(alerta.cuota.id, 'mora'),
-                                  ocultasEnPanel: ocultasEnPanel,
-                                  setSheetState: setSheetState,
-                                  mostrarMensaje: (deshacer) =>
-                                      mostrarMensajeEliminacion(
-                                        _claveAlerta(alerta.cuota.id, 'mora'),
-                                        deshacer,
-                                        setSheetState,
-                                      ),
+                      ...cuotasDeHoy
+                          .where(
+                            (alerta) =>
+                                !_alertasEliminadas.contains(
+                                  _claveAlerta(alerta.cuota.id, 'hoy'),
+                                ) &&
+                                !ocultasEnPanel.contains(
+                                  _claveAlerta(alerta.cuota.id, 'hoy'),
                                 ),
-                              );
-                            },
+                          )
+                          .map(
+                            (alerta) => _alertaDeslizable(
+                              clave: _claveAlerta(alerta.cuota.id, 'hoy'),
+                              titulo: alerta.cliente.nombre,
+                              icono: Icons.event_available_outlined,
+                              color: AppColors.blue,
+                              subtitulo:
+                                  'Cuota ${alerta.cuota.numeroCuota} · '
+                                  '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
+                              onTap: () {
+                                Navigator.of(sheetContext).pop();
+                                _abrirDetalle(context, alerta.prestamo);
+                              },
+                              onDismissed: () {
+                                unawaited(
+                                  _eliminarAlertaDelPanel(
+                                    clave: _claveAlerta(alerta.cuota.id, 'hoy'),
+                                    ocultasEnPanel: ocultasEnPanel,
+                                    setSheetState: setSheetState,
+                                    mostrarMensaje: (deshacer) =>
+                                        mostrarMensajeEliminacion(
+                                          _claveAlerta(alerta.cuota.id, 'hoy'),
+                                          deshacer,
+                                          setSheetState,
+                                        ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
+                    ],
                   ],
-                  if (cuotasDeHoy.any(
-                    (alerta) =>
-                        !_alertasEliminadas.contains(
-                          _claveAlerta(alerta.cuota.id, 'hoy'),
-                        ) &&
-                        !ocultasEnPanel.contains(
-                          _claveAlerta(alerta.cuota.id, 'hoy'),
-                        ),
-                  )) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Cuotas para hoy',
-                      style: Theme.of(sheetContext).textTheme.titleMedium,
-                    ),
-                    ...cuotasDeHoy
-                        .where(
-                          (alerta) =>
-                              !_alertasEliminadas.contains(
-                                _claveAlerta(alerta.cuota.id, 'hoy'),
-                              ) &&
-                              !ocultasEnPanel.contains(
-                                _claveAlerta(alerta.cuota.id, 'hoy'),
-                              ),
-                        )
-                        .map(
-                          (alerta) => _alertaDeslizable(
-                            clave: _claveAlerta(alerta.cuota.id, 'hoy'),
-                            titulo: alerta.cliente.nombre,
-                            icono: Icons.event_available_outlined,
-                            color: AppColors.blue,
-                            subtitulo:
-                                'Cuota ${alerta.cuota.numeroCuota} · '
-                                '${GotaDateUtils.formatearMoneda(alerta.cuota.montoCuota - alerta.cuota.montoPagado)}',
-                            onTap: () {
-                              Navigator.of(sheetContext).pop();
-                              _abrirDetalle(context, alerta.prestamo);
-                            },
-                            onDismissed: () {
-                              unawaited(
-                                _eliminarAlertaDelPanel(
-                                  clave: _claveAlerta(alerta.cuota.id, 'hoy'),
-                                  ocultasEnPanel: ocultasEnPanel,
-                                  setSheetState: setSheetState,
-                                  mostrarMensaje: (deshacer) =>
-                                      mostrarMensajeEliminacion(
-                                        _claveAlerta(alerta.cuota.id, 'hoy'),
-                                        deshacer,
-                                        setSheetState,
-                                      ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),

@@ -56,12 +56,8 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
   @override
   void initState() {
     super.initState();
-    final saldo = widget.cuota.montoCuota - widget.cuota.montoPagado;
-    final moraAdicional = _moraAdicional;
-    // Formatear con separadores de miles igual que MilesInputFormatter
-    _montoController = TextEditingController(
-      text: _formatearMiles((saldo + moraAdicional).round().toString()),
-    );
+    _montoController = TextEditingController();
+    _establecerMonto(_montoInicial);
   }
 
   @override
@@ -78,6 +74,20 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       buffer.write(digitos[i]);
     }
     return buffer.toString();
+  }
+
+  double get _montoInicial {
+    final saldoActual = widget.cuota.montoCuota - widget.cuota.montoPagado;
+    return (saldoActual + _moraAdicional).clamp(0.0, double.infinity);
+  }
+
+  void _establecerMonto(double monto) {
+    final texto = _formatearMiles(monto.floor().toString());
+    _montoController.value = TextEditingValue(
+      text: texto,
+      selection: TextSelection.collapsed(offset: texto.length),
+      composing: TextRange.empty,
+    );
   }
 
   double? _parsearMonto(String texto) {
@@ -223,10 +233,7 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       setState(() {
         _fecha = seleccion;
         if (!_montoEditado) {
-          final saldo = widget.cuota.montoCuota - widget.cuota.montoPagado;
-          _montoController.text = _formatearMiles(
-            (saldo + _moraAdicional).round().toString(),
-          );
+          _establecerMonto(_montoInicial);
         }
       });
     }
@@ -265,13 +272,16 @@ class _PaymentBottomSheetState extends State<PaymentBottomSheet> {
       final cuotaActualizada = provider
           .cuotasDePrestamo(prestamo.id!)
           .firstWhere((item) => item.id == cuota.id);
-      final saldoTotal =
-          cuotaActualizada.montoCuota - cuotaActualizada.montoPagado;
-      if (MonedaColombiana.esMultiploDeUnidad(saldoTotal) &&
+      final saldoBase =
+          cuotaActualizada.montoCuota -
+          cuotaActualizada.montoPenalizacion -
+          cuotaActualizada.montoPagado;
+      final limitePago = saldoBase + cuotaActualizada.montoPenalizacion;
+      if (MonedaColombiana.esMultiploDeUnidad(limitePago) &&
           !MonedaColombiana.esMultiploDeUnidad(monto)) {
         throw ArgumentError('El pago debe ser múltiplo de \$1.000.');
       }
-      if (monto > saldoTotal + 0.000001) {
+      if (monto > limitePago + 0.000001) {
         throw ArgumentError('El pago supera el saldo pendiente actualizado.');
       }
 

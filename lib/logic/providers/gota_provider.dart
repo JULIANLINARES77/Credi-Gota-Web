@@ -148,6 +148,19 @@ class GotaProvider extends ChangeNotifier {
       }
 
       final resumen = await _databaseHelper.obtenerResumenDashboard();
+      resumen['ganancia_hoy'] = pagosHoy.fold<double>(0, (total, pago) {
+        final prestamo = prestamosPorId[pago.prestamoId];
+        final cuota = (cuotasPorPrestamo[pago.prestamoId] ?? const <Cuota>[])
+            .where((item) => item.id == pago.cuotaId)
+            .firstOrNull;
+        if (prestamo == null || cuota?.esPenalizacion == true) return total;
+        return total +
+            _calculadora.calcularGananciaProporcional(
+              montoPagado: pago.monto,
+              totalPagar: prestamo.montoTotalPagar,
+              interesTotal: prestamo.montoInteres,
+            );
+      });
       final configuracion = await _databaseHelper.obtenerConfiguracion();
       final clientesPorId = {
         for (final cliente in clientes)
@@ -519,40 +532,49 @@ class GotaProvider extends ChangeNotifier {
         DbConstants.configuracionMoraDiariaTipoRecargo,
         DbConstants.configuracionMoraDiariaValorRecargo,
         DbConstants.configuracionMoraDiariaRecargoAcumulable,
+        DbConstants.configuracionMoraDiariaHabilitada,
       ),
       'semanal' => (
         DbConstants.configuracionMoraSemanalDiasGracia,
         DbConstants.configuracionMoraSemanalTipoRecargo,
         DbConstants.configuracionMoraSemanalValorRecargo,
         DbConstants.configuracionMoraSemanalRecargoAcumulable,
+        DbConstants.configuracionMoraSemanalHabilitada,
       ),
       'quincenal' => (
         DbConstants.configuracionMoraQuincenalDiasGracia,
         DbConstants.configuracionMoraQuincenalTipoRecargo,
         DbConstants.configuracionMoraQuincenalValorRecargo,
         DbConstants.configuracionMoraQuincenalRecargoAcumulable,
+        DbConstants.configuracionMoraQuincenalHabilitada,
       ),
       _ => (
         DbConstants.configuracionMoraMensualDiasGracia,
         DbConstants.configuracionMoraMensualTipoRecargo,
         DbConstants.configuracionMoraMensualValorRecargo,
         DbConstants.configuracionMoraMensualRecargoAcumulable,
+        DbConstants.configuracionMoraMensualHabilitada,
       ),
     };
+    final habilitada =
+        ((configuracion[frecuenciaKeys.$5] as num?)?.toInt() ?? 1) != 0;
     final regla = _ReglaMora(
-      diasGracia:
-          (configuracion[frecuenciaKeys.$1] as num?)?.toInt() ??
-          (configuracion[DbConstants.configuracionDiasGraciaMora] as num?)
-              ?.toInt() ??
-          3,
+      diasGracia: habilitada
+          ? (configuracion[frecuenciaKeys.$1] as num?)?.toInt() ??
+                (configuracion[DbConstants.configuracionDiasGraciaMora] as num?)
+                    ?.toInt() ??
+                3
+          : 0,
       tipoRecargo: configuracion[frecuenciaKeys.$2] as String? ?? 'PORCENTAJE',
-      valorRecargo:
-          (configuracion[frecuenciaKeys.$3] as num?)?.toDouble() ??
-          (configuracion[DbConstants.configuracionPorcentajeMora] as num?)
-              ?.toDouble() ??
-          10,
+      valorRecargo: habilitada
+          ? (configuracion[frecuenciaKeys.$3] as num?)?.toDouble() ??
+                (configuracion[DbConstants.configuracionPorcentajeMora] as num?)
+                    ?.toDouble() ??
+                10
+          : 0,
       acumulable:
           ((configuracion[frecuenciaKeys.$4] as num?)?.toInt() ?? 0) != 0,
+      habilitada: habilitada,
     );
     if (regla.diasGracia < 0 ||
         !regla.valorRecargo.isFinite ||
@@ -837,10 +859,12 @@ class _ReglaMora {
     required this.tipoRecargo,
     required this.valorRecargo,
     required this.acumulable,
+    required this.habilitada,
   });
 
   final int diasGracia;
   final String tipoRecargo;
   final double valorRecargo;
   final bool acumulable;
+  final bool habilitada;
 }

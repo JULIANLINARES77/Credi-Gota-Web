@@ -192,10 +192,10 @@ void main() {
       );
 
       expect(fechas, [
+        DateTime(2026, 9, 28),
         DateTime(2026, 9, 30),
         DateTime(2026, 10, 2),
         DateTime(2026, 10, 5),
-        DateTime(2026, 10, 7),
       ]);
     });
 
@@ -245,7 +245,7 @@ void main() {
           frecuencia: CalculadoraService.frecuenciaDiaria,
         );
 
-        expect(fechas, [DateTime(2026, 1, 1)]);
+        expect(fechas, [DateTime(2025, 12, 31)]);
       },
     );
 
@@ -258,9 +258,42 @@ void main() {
       );
 
       expect(fechas, [
+        DateTime(2026, 7, 18),
         DateTime(2026, 7, 19),
         DateTime(2026, 7, 20),
-        DateTime(2026, 7, 21),
+      ]);
+    });
+
+    test('usa la fecha inicial como primera cuota semanal y quincenal', () {
+      final fechasSemanales = calculadora.generarFechasPago(
+        fechaInicio: lunes,
+        numCuotas: 2,
+        frecuencia: CalculadoraService.frecuenciaSemanal,
+      );
+      final fechasQuincenales = calculadora.generarFechasPago(
+        fechaInicio: lunes,
+        numCuotas: 2,
+        frecuencia: CalculadoraService.frecuenciaQuincenal,
+      );
+
+      expect(fechasSemanales, [DateTime(2026, 9, 28), DateTime(2026, 10, 5)]);
+      expect(fechasQuincenales, [
+        DateTime(2026, 9, 28),
+        DateTime(2026, 10, 13),
+      ]);
+    });
+
+    test('incluye la fecha inicial cuando pertenece a los días permitidos', () {
+      final fechas = calculadora.generarFechasPago(
+        fechaInicio: lunes,
+        numCuotas: 3,
+        frecuencia: CalculadoraService.frecuenciaLunesMiercolesViernes,
+      );
+
+      expect(fechas, [
+        DateTime(2026, 9, 28),
+        DateTime(2026, 9, 30),
+        DateTime(2026, 10, 2),
       ]);
     });
 
@@ -283,7 +316,7 @@ void main() {
         diasCorridos: false,
       );
 
-      expect(fechas, [DateTime(2026, 10, 19)]);
+      expect(fechas, [DateTime(2026, 10, 16)]);
     });
 
     test('semanal conserva weekday y quincenal suma quince días', () {
@@ -298,8 +331,8 @@ void main() {
         frecuencia: CalculadoraService.frecuenciaQuincenal,
       );
 
-      expect(semanales, [DateTime(2026, 10, 5), DateTime(2026, 10, 12)]);
-      expect(quincenales, [DateTime(2026, 10, 13), DateTime(2026, 10, 28)]);
+      expect(semanales, [DateTime(2026, 9, 28), DateTime(2026, 10, 5)]);
+      expect(quincenales, [DateTime(2026, 9, 28), DateTime(2026, 10, 13)]);
     });
 
     test('mensual conserva el día y ajusta fechas de fin de mes', () {
@@ -310,10 +343,10 @@ void main() {
       );
 
       expect(fechas, [
+        DateTime(2026, 1, 31),
         DateTime(2026, 2, 28),
         DateTime(2026, 3, 31),
         DateTime(2026, 4, 30),
-        DateTime(2026, 5, 31),
       ]);
     });
 
@@ -324,7 +357,7 @@ void main() {
           numCuotas: 4,
           frecuencia: CalculadoraService.frecuenciaLunesMiercolesViernes,
         ),
-        DateTime(2026, 10, 7),
+        DateTime(2026, 10, 5),
       );
     });
 

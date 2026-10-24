@@ -495,7 +495,7 @@ class _ResumenPreview extends StatelessWidget {
         (
           'Capital activo',
           GotaDateUtils.formatearMoneda(
-            demo.prestamosActivos.fold(
+            demo.prestamos.fold(
               0.0,
               (total, prestamo) => total + prestamo.montoCapital,
             ),
@@ -504,7 +504,7 @@ class _ResumenPreview extends StatelessWidget {
         (
           'Interés esperado activo',
           GotaDateUtils.formatearMoneda(
-            demo.prestamosActivos.fold(
+            demo.prestamos.fold(
               0.0,
               (total, prestamo) => total + prestamo.montoInteres,
             ),

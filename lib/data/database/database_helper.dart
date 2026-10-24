@@ -9,6 +9,7 @@ import '../models/cliente.dart';
 import '../models/cuota.dart';
 import '../models/pago.dart';
 import '../models/prestamo.dart';
+import '../../logic/services/calculadora_service.dart';
 
 class DatabaseHelper {
   DatabaseHelper._();
@@ -137,18 +138,22 @@ class DatabaseHelper {
         ${DbConstants.configuracionMoraDiariaTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
         ${DbConstants.configuracionMoraDiariaValorRecargo} REAL NOT NULL DEFAULT 10,
         ${DbConstants.configuracionMoraDiariaRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraDiariaHabilitada} INTEGER NOT NULL DEFAULT 1,
         ${DbConstants.configuracionMoraSemanalDiasGracia} INTEGER NOT NULL DEFAULT 3,
         ${DbConstants.configuracionMoraSemanalTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
         ${DbConstants.configuracionMoraSemanalValorRecargo} REAL NOT NULL DEFAULT 10,
         ${DbConstants.configuracionMoraSemanalRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraSemanalHabilitada} INTEGER NOT NULL DEFAULT 1,
         ${DbConstants.configuracionMoraQuincenalDiasGracia} INTEGER NOT NULL DEFAULT 3,
         ${DbConstants.configuracionMoraQuincenalTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
         ${DbConstants.configuracionMoraQuincenalValorRecargo} REAL NOT NULL DEFAULT 10,
         ${DbConstants.configuracionMoraQuincenalRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraQuincenalHabilitada} INTEGER NOT NULL DEFAULT 1,
         ${DbConstants.configuracionMoraMensualDiasGracia} INTEGER NOT NULL DEFAULT 3,
         ${DbConstants.configuracionMoraMensualTipoRecargo} TEXT NOT NULL DEFAULT 'PORCENTAJE',
         ${DbConstants.configuracionMoraMensualValorRecargo} REAL NOT NULL DEFAULT 10,
         ${DbConstants.configuracionMoraMensualRecargoAcumulable} INTEGER NOT NULL DEFAULT 0,
+        ${DbConstants.configuracionMoraMensualHabilitada} INTEGER NOT NULL DEFAULT 1,
         ${DbConstants.configuracionPinSeguridad} TEXT,
         ${DbConstants.configuracionPinHash} TEXT,
         ${DbConstants.configuracionPinIntentosFallidos} INTEGER NOT NULL DEFAULT 0,
@@ -189,18 +194,22 @@ class DatabaseHelper {
       DbConstants.configuracionMoraDiariaTipoRecargo: 'PORCENTAJE',
       DbConstants.configuracionMoraDiariaValorRecargo: 10.0,
       DbConstants.configuracionMoraDiariaRecargoAcumulable: 0,
+      DbConstants.configuracionMoraDiariaHabilitada: 1,
       DbConstants.configuracionMoraSemanalDiasGracia: 3,
       DbConstants.configuracionMoraSemanalTipoRecargo: 'PORCENTAJE',
       DbConstants.configuracionMoraSemanalValorRecargo: 10.0,
       DbConstants.configuracionMoraSemanalRecargoAcumulable: 0,
+      DbConstants.configuracionMoraSemanalHabilitada: 1,
       DbConstants.configuracionMoraQuincenalDiasGracia: 3,
       DbConstants.configuracionMoraQuincenalTipoRecargo: 'PORCENTAJE',
       DbConstants.configuracionMoraQuincenalValorRecargo: 10.0,
       DbConstants.configuracionMoraQuincenalRecargoAcumulable: 0,
+      DbConstants.configuracionMoraQuincenalHabilitada: 1,
       DbConstants.configuracionMoraMensualDiasGracia: 3,
       DbConstants.configuracionMoraMensualTipoRecargo: 'PORCENTAJE',
       DbConstants.configuracionMoraMensualValorRecargo: 10.0,
       DbConstants.configuracionMoraMensualRecargoAcumulable: 0,
+      DbConstants.configuracionMoraMensualHabilitada: 1,
       DbConstants.configuracionMoneda: 'COP',
     });
   }
@@ -338,6 +347,32 @@ class DatabaseHelper {
         );
       }
     }
+    if (oldVersion < 8) {
+      const fields = {
+        DbConstants.configuracionMoraDiariaHabilitada:
+            'INTEGER NOT NULL DEFAULT 1',
+        DbConstants.configuracionMoraSemanalHabilitada:
+            'INTEGER NOT NULL DEFAULT 1',
+        DbConstants.configuracionMoraQuincenalHabilitada:
+            'INTEGER NOT NULL DEFAULT 1',
+        DbConstants.configuracionMoraMensualHabilitada:
+            'INTEGER NOT NULL DEFAULT 1',
+      };
+      final columns = await db.rawQuery(
+        'PRAGMA table_info(${DbConstants.tableConfiguracion})',
+      );
+      final existingColumns = columns
+          .map((column) => column['name'])
+          .whereType<String>()
+          .toSet();
+      for (final entry in fields.entries) {
+        if (existingColumns.contains(entry.key)) continue;
+        await db.execute(
+          'ALTER TABLE ${DbConstants.tableConfiguracion} '
+          'ADD COLUMN ${entry.key} ${entry.value}',
+        );
+      }
+    }
   }
 
   static const _moraConfigFields = {
@@ -347,6 +382,7 @@ class DatabaseHelper {
     DbConstants.configuracionMoraDiariaValorRecargo: 'REAL NOT NULL DEFAULT 10',
     DbConstants.configuracionMoraDiariaRecargoAcumulable:
         'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraDiariaHabilitada: 'INTEGER NOT NULL DEFAULT 1',
     DbConstants.configuracionMoraSemanalDiasGracia:
         'INTEGER NOT NULL DEFAULT 3',
     DbConstants.configuracionMoraSemanalTipoRecargo:
@@ -355,6 +391,8 @@ class DatabaseHelper {
         'REAL NOT NULL DEFAULT 10',
     DbConstants.configuracionMoraSemanalRecargoAcumulable:
         'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraSemanalHabilitada:
+        'INTEGER NOT NULL DEFAULT 1',
     DbConstants.configuracionMoraQuincenalDiasGracia:
         'INTEGER NOT NULL DEFAULT 3',
     DbConstants.configuracionMoraQuincenalTipoRecargo:
@@ -363,6 +401,8 @@ class DatabaseHelper {
         'REAL NOT NULL DEFAULT 10',
     DbConstants.configuracionMoraQuincenalRecargoAcumulable:
         'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraQuincenalHabilitada:
+        'INTEGER NOT NULL DEFAULT 1',
     DbConstants.configuracionMoraMensualDiasGracia:
         'INTEGER NOT NULL DEFAULT 3',
     DbConstants.configuracionMoraMensualTipoRecargo:
@@ -371,6 +411,8 @@ class DatabaseHelper {
         'REAL NOT NULL DEFAULT 10',
     DbConstants.configuracionMoraMensualRecargoAcumulable:
         'INTEGER NOT NULL DEFAULT 0',
+    DbConstants.configuracionMoraMensualHabilitada:
+        'INTEGER NOT NULL DEFAULT 1',
   };
 
   Future<void> close() async {
@@ -569,9 +611,7 @@ class DatabaseHelper {
       'SELECT '
       'COALESCE(SUM(${DbConstants.prestamoMontoCapital}), 0) AS capital, '
       'COALESCE(SUM(${DbConstants.prestamoMontoInteres}), 0) AS interes '
-      'FROM ${DbConstants.tablePrestamos} '
-      'WHERE ${DbConstants.prestamoEstado} IN (?, ?)',
-      ['ACTIVO', 'MORA'],
+      'FROM ${DbConstants.tablePrestamos}',
     );
     final mensuales = await db.rawQuery(
       'SELECT strftime(\'%Y-%m\', '
@@ -798,21 +838,37 @@ class DatabaseHelper {
   }
 
   Future<double> obtenerGananciaDelDia(DateTime fecha) async {
+    final rows = await obtenerDatosGananciaDelDia(fecha);
+    const calculadora = CalculadoraService();
+    return rows.fold<double>(0, (total, row) {
+      if ((row['es_penalizacion'] as num?)?.toInt() != 0) return total;
+      return total +
+          calculadora.calcularGananciaProporcional(
+            montoPagado: (row['monto'] as num).toDouble(),
+            totalPagar: (row['total_pagar'] as num).toDouble(),
+            interesTotal: (row['interes'] as num).toDouble(),
+          );
+    });
+  }
+
+  Future<List<Map<String, Object?>>> obtenerDatosGananciaDelDia(
+    DateTime fecha,
+  ) async {
     final db = await database;
     final rows = await db.rawQuery(
-      'SELECT COALESCE(SUM(p.${DbConstants.pagoMonto} * '
-      'l.${DbConstants.prestamoMontoInteres} / '
-      'NULLIF(l.${DbConstants.prestamoMontoTotalPagar}, 0)), 0) AS ganancia '
+      'SELECT p.${DbConstants.pagoMonto} AS monto, '
+      'l.${DbConstants.prestamoMontoInteres} AS interes, '
+      'l.${DbConstants.prestamoMontoTotalPagar} AS total_pagar, '
+      'c.${DbConstants.cuotaEsPenalizacion} AS es_penalizacion '
       'FROM ${DbConstants.tablePagos} p '
       'JOIN ${DbConstants.tableCuotas} c '
       'ON c.${DbConstants.columnId} = p.${DbConstants.pagoCuotaId} '
       'JOIN ${DbConstants.tablePrestamos} l '
       'ON l.${DbConstants.columnId} = p.${DbConstants.pagoPrestamoId} '
-      'WHERE substr(p.${DbConstants.pagoFechaHora}, 1, 10) = ? '
-      'AND c.${DbConstants.cuotaEsPenalizacion} = 0',
+      'WHERE substr(p.${DbConstants.pagoFechaHora}, 1, 10) = ?',
       [_dateKey(fecha)],
     );
-    return _asDouble(rows.first['ganancia']);
+    return rows.map(Map<String, Object?>.from).toList(growable: false);
   }
 
   Future<List<Pago>> obtenerPagosPorPrestamo(int prestamoId) async {
@@ -839,18 +895,7 @@ class DatabaseHelper {
           FROM ${DbConstants.tablePagos} p
           WHERE substr(p.${DbConstants.pagoFechaHora}, 1, 10) = ?
         ), 0) AS recaudo_hoy,
-        COALESCE((
-          SELECT SUM(p.${DbConstants.pagoMonto} *
-            l.${DbConstants.prestamoMontoInteres} /
-            NULLIF(l.${DbConstants.prestamoMontoTotalPagar}, 0))
-          FROM ${DbConstants.tablePagos} p
-          JOIN ${DbConstants.tableCuotas} c
-            ON c.${DbConstants.columnId} = p.${DbConstants.pagoCuotaId}
-          JOIN ${DbConstants.tablePrestamos} l
-            ON l.${DbConstants.columnId} = p.${DbConstants.pagoPrestamoId}
-          WHERE substr(p.${DbConstants.pagoFechaHora}, 1, 10) = ?
-            AND c.${DbConstants.cuotaEsPenalizacion} = 0
-        ), 0) AS ganancia_hoy,
+        0 AS ganancia_hoy,
         COALESCE((
           SELECT SUM(l.${DbConstants.prestamoSaldoPendiente})
           FROM ${DbConstants.tablePrestamos} l
@@ -875,12 +920,13 @@ class DatabaseHelper {
             AND l.${DbConstants.prestamoEstado} IN ('ACTIVO', 'MORA')
         ), 0) AS pagos_pendientes_hoy
       ''',
-      [today, today, today, today],
+      [today, today, today],
     );
     final summary = rows.first;
+    final gananciaHoy = await obtenerGananciaDelDia(DateTime.now());
     return {
       'recaudo_hoy': _asDouble(summary['recaudo_hoy']),
-      'ganancia_hoy': _asDouble(summary['ganancia_hoy']),
+      'ganancia_hoy': gananciaHoy,
       'total_en_calle': _asDouble(summary['total_en_calle']),
       'clientes_en_mora': (summary['clientes_en_mora'] as num).toInt(),
       'pagos_pendientes_hoy': _asDouble(summary['pagos_pendientes_hoy']),

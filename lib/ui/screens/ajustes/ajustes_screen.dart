@@ -54,24 +54,28 @@ class _AjustesScreenState extends State<AjustesScreen>
       DbConstants.configuracionMoraDiariaTipoRecargo,
       DbConstants.configuracionMoraDiariaValorRecargo,
       DbConstants.configuracionMoraDiariaRecargoAcumulable,
+      DbConstants.configuracionMoraDiariaHabilitada,
     ),
     'SEMANAL': (
       DbConstants.configuracionMoraSemanalDiasGracia,
       DbConstants.configuracionMoraSemanalTipoRecargo,
       DbConstants.configuracionMoraSemanalValorRecargo,
       DbConstants.configuracionMoraSemanalRecargoAcumulable,
+      DbConstants.configuracionMoraSemanalHabilitada,
     ),
     'QUINCENAL': (
       DbConstants.configuracionMoraQuincenalDiasGracia,
       DbConstants.configuracionMoraQuincenalTipoRecargo,
       DbConstants.configuracionMoraQuincenalValorRecargo,
       DbConstants.configuracionMoraQuincenalRecargoAcumulable,
+      DbConstants.configuracionMoraQuincenalHabilitada,
     ),
     'MENSUAL': (
       DbConstants.configuracionMoraMensualDiasGracia,
       DbConstants.configuracionMoraMensualTipoRecargo,
       DbConstants.configuracionMoraMensualValorRecargo,
       DbConstants.configuracionMoraMensualRecargoAcumulable,
+      DbConstants.configuracionMoraMensualHabilitada,
     ),
   };
 
@@ -141,6 +145,8 @@ class _AjustesScreenState extends State<AjustesScreen>
                 '${configuracion[keys.$3] ?? configuracion[DbConstants.configuracionPorcentajeMora] ?? 10}';
             regla.acumulable =
                 ((configuracion[keys.$4] as num?)?.toInt() ?? 0) != 0;
+            regla.habilitada =
+                ((configuracion[keys.$5] as num?)?.toInt() ?? 1) != 0;
           }
           _alertasMora =
               ((configuracion[DbConstants.configuracionAlertasMora] as num?)
@@ -376,6 +382,12 @@ class _AjustesScreenState extends State<AjustesScreen>
       Text(
         'Pago $frecuencia',
         style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Aplicar mora a préstamos nuevos'),
+        value: regla.habilitada,
+        onChanged: (value) => setState(() => regla.habilitada = value),
       ),
       const SizedBox(height: 8),
       Row(
@@ -1037,6 +1049,8 @@ class _AjustesScreenState extends State<AjustesScreen>
           ),
         for (final entry in _reglasMora.entries)
           _clavesReglasMora[entry.key]!.$4: entry.value.acumulable ? 1 : 0,
+        for (final entry in _reglasMora.entries)
+          _clavesReglasMora[entry.key]!.$5: entry.value.habilitada ? 1 : 0,
       };
       await provider.guardarConfiguracion(cambios);
       try {
@@ -1110,4 +1124,5 @@ class _ReglaMoraEdicion {
   final valorRecargo = TextEditingController(text: '10');
   String tipoRecargo = 'PORCENTAJE';
   bool acumulable = false;
+  bool habilitada = true;
 }

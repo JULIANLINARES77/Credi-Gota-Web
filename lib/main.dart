@@ -159,6 +159,9 @@ class GotaControlApp extends StatelessWidget {
         ),
         snackBarTheme: const SnackBarThemeData(
           behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.surface,
+          contentTextStyle: TextStyle(color: AppColors.textPrimary),
+          actionTextColor: AppColors.primary,
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: AppColors.surface,

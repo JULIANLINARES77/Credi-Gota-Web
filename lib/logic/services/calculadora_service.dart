@@ -197,33 +197,40 @@ class CalculadoraService {
     switch (frecuenciaNormalizada) {
       case frecuenciaDiaria:
         while (fechas.length < numCuotas) {
-          fechaActual = _sumarDiasCalendario(fechaActual, 1);
-          if (saltarDomingosEfectivo &&
-              fechaActual.weekday == DateTime.sunday) {
+          final esFinDeSemana =
+              fechaActual.weekday == DateTime.saturday ||
+              fechaActual.weekday == DateTime.sunday;
+          if ((!diasCorridosEfectivos && esFinDeSemana) ||
+              (saltarDomingosEfectivo &&
+                  fechaActual.weekday == DateTime.sunday)) {
+            fechaActual = _sumarDiasCalendario(fechaActual, 1);
             continue;
           }
           fechas.add(fechaActual);
+          fechaActual = _sumarDiasCalendario(fechaActual, 1);
         }
       case frecuenciaSemanal:
         for (var i = 0; i < numCuotas; i++) {
-          fechaActual = _sumarDiasCalendario(fechaActual, 7);
           fechas.add(fechaActual);
+          fechaActual = _sumarDiasCalendario(fechaActual, 7);
         }
       case frecuenciaQuincenal:
         for (var i = 0; i < numCuotas; i++) {
-          fechaActual = _sumarDiasCalendario(fechaActual, 15);
           fechas.add(fechaActual);
+          fechaActual = _sumarDiasCalendario(fechaActual, 15);
         }
       case frecuenciaMensual:
-        for (var indice = 1; indice <= numCuotas; indice++) {
+        fechas.add(fechaInicio);
+        for (var indice = 1; indice < numCuotas; indice++) {
           fechaActual = _sumarMesesDesde(fechaInicio, indice);
           fechas.add(fechaActual);
         }
       case frecuenciaLunesMiercolesViernes:
       case frecuenciaPersonalizada:
         for (var i = 0; i < numCuotas; i++) {
-          fechaActual = _siguienteDiaHabil(fechaActual, diasPermitidos!);
+          fechaActual = _primerDiaHabilDesde(fechaActual, diasPermitidos!);
           fechas.add(fechaActual);
+          fechaActual = _sumarDiasCalendario(fechaActual, 1);
         }
     }
 
@@ -265,12 +272,12 @@ class CalculadoraService {
     return dias.toSet().toList()..sort();
   }
 
-  DateTime _siguienteDiaHabil(DateTime fecha, List<int> diasPermitidos) {
-    var siguiente = _sumarDiasCalendario(fecha, 1);
-    while (!diasPermitidos.contains(siguiente.weekday)) {
-      siguiente = _sumarDiasCalendario(siguiente, 1);
+  DateTime _primerDiaHabilDesde(DateTime fecha, List<int> diasPermitidos) {
+    var candidato = fecha;
+    while (!diasPermitidos.contains(candidato.weekday)) {
+      candidato = _sumarDiasCalendario(candidato, 1);
     }
-    return siguiente;
+    return candidato;
   }
 
   DateTime _sumarDiasCalendario(DateTime fecha, int dias) {

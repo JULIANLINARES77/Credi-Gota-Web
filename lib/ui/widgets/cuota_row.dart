@@ -74,14 +74,31 @@ class CuotaRow extends StatelessWidget {
           ),
           Expanded(
             flex: 2,
-            child: Text(
-              GotaDateUtils.formatearMoneda(cuota.montoCuota),
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w700,
-                decoration: pagada ? TextDecoration.lineThrough : null,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  GotaDateUtils.formatearMoneda(
+                    cuota.montoCuota - cuota.montoPenalizacion,
+                  ),
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    decoration: pagada ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                if (atrasada && cuota.montoPenalizacion > 0)
+                  Text(
+                    '+ Mora: ${GotaDateUtils.formatearMoneda(cuota.montoPenalizacion)}',
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      color: AppColors.warning,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(width: 8),

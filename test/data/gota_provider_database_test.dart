@@ -113,7 +113,7 @@ void main() {
     expect(conDiasCorridos.diasCorridos, isTrue);
     expect(
       provider.cuotasDePrestamo(conDiasCorridos.id!).single.fechaVencimiento,
-      DateTime(2026, 2, 1),
+      DateTime(2026, 1, 31),
     );
     expect(sinDiasCorridos.diasCorridos, isFalse);
     expect(
@@ -713,6 +713,46 @@ void main() {
     expect(provider.prestamoPorId(primero.id!)!.valorRecargoMora, 5000);
   });
 
+  test('desactiva la mora semanal solo en préstamos nuevos', () async {
+    await provider.cargarDatos();
+    final cliente = await provider.agregarCliente(
+      nombre: 'Cliente switch mora',
+      telefono: '3001234567',
+    );
+    await provider.guardarConfiguracion({
+      DbConstants.configuracionMoraSemanalDiasGracia: 2,
+      DbConstants.configuracionMoraSemanalTipoRecargo: 'MONTO_FIJO',
+      DbConstants.configuracionMoraSemanalValorRecargo: 5000.0,
+      DbConstants.configuracionMoraSemanalRecargoAcumulable: 1,
+      DbConstants.configuracionMoraSemanalHabilitada: 0,
+    });
+
+    final sinMora = await provider.crearPrestamo(
+      clienteId: cliente.id!,
+      capital: 100000,
+      porcentajeInteres: 0,
+      numCuotas: 1,
+      frecuencia: CalculadoraService.frecuenciaSemanal,
+    );
+    expect(sinMora.diasGraciaMora, 0);
+    expect(sinMora.valorRecargoMora, 0);
+    expect(sinMora.tipoRecargoMora, 'MONTO_FIJO');
+    expect(sinMora.recargoAcumulable, isTrue);
+
+    await provider.guardarConfiguracion({
+      DbConstants.configuracionMoraSemanalHabilitada: 1,
+    });
+    final conMora = await provider.crearPrestamo(
+      clienteId: cliente.id!,
+      capital: 100000,
+      porcentajeInteres: 0,
+      numCuotas: 1,
+      frecuencia: CalculadoraService.frecuenciaSemanal,
+    );
+    expect(conMora.diasGraciaMora, 2);
+    expect(conMora.valorRecargoMora, 5000);
+  });
+
   test('aplica una sola vez el recargo fijo configurado en la cuota', () async {
     await provider.cargarDatos();
     final cliente = await provider.agregarCliente(
@@ -768,42 +808,45 @@ void main() {
       provider
           .cuotasDePrestamo(prestamo.id!)
           .map((cuota) => cuota.fechaVencimiento),
-      [DateTime(2026, 10, 30), DateTime(2026, 11, 30), DateTime(2026, 12, 30)],
+      [DateTime(2026, 9, 30), DateTime(2026, 10, 30), DateTime(2026, 11, 30)],
     );
   });
 
-  test('detecta mora en préstamos diarios, semanales, quincenales y mensuales', () async {
-    await provider.cargarDatos();
-    const frecuencias = [
-      CalculadoraService.frecuenciaDiaria,
-      CalculadoraService.frecuenciaSemanal,
-      CalculadoraService.frecuenciaQuincenal,
-      CalculadoraService.frecuenciaMensual,
-    ];
+  test(
+    'detecta mora en préstamos diarios, semanales, quincenales y mensuales',
+    () async {
+      await provider.cargarDatos();
+      const frecuencias = [
+        CalculadoraService.frecuenciaDiaria,
+        CalculadoraService.frecuenciaSemanal,
+        CalculadoraService.frecuenciaQuincenal,
+        CalculadoraService.frecuenciaMensual,
+      ];
 
-    for (var indice = 0; indice < frecuencias.length; indice++) {
-      final cliente = await provider.agregarCliente(
-        nombre: 'Cliente mora ${frecuencias[indice]}',
-        telefono: '30012345$indice',
-      );
-      await provider.crearPrestamo(
-        clienteId: cliente.id!,
-        capital: 100000,
-        porcentajeInteres: 20,
-        numCuotas: 1,
-        frecuencia: frecuencias[indice],
-        fechaInicio: DateTime(2026, 8, 1),
-      );
-    }
+      for (var indice = 0; indice < frecuencias.length; indice++) {
+        final cliente = await provider.agregarCliente(
+          nombre: 'Cliente mora ${frecuencias[indice]}',
+          telefono: '30012345$indice',
+        );
+        await provider.crearPrestamo(
+          clienteId: cliente.id!,
+          capital: 100000,
+          porcentajeInteres: 20,
+          numCuotas: 1,
+          frecuencia: frecuencias[indice],
+          fechaInicio: DateTime(2026, 8, 1),
+        );
+      }
 
-    await provider.cargarDatos();
-    expect(provider.moras, hasLength(4));
-    expect(
-      provider.moras.map((mora) => mora.prestamo.frecuencia),
-      containsAll(frecuencias),
-    );
-    expect(provider.moras.every((mora) => mora.diasAtraso > 0), isTrue);
-  });
+      await provider.cargarDatos();
+      expect(provider.moras, hasLength(4));
+      expect(
+        provider.moras.map((mora) => mora.prestamo.frecuencia),
+        containsAll(frecuencias),
+      );
+      expect(provider.moras.every((mora) => mora.diasAtraso > 0), isTrue);
+    },
+  );
 
   test('exporta cada tabla a CSV con sus claves de relación', () async {
     await provider.cargarDatos();

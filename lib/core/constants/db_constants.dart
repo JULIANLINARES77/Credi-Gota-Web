@@ -2,7 +2,7 @@ class DbConstants {
   DbConstants._();
 
   static const databaseName = 'gota_control.db';
-  static const databaseVersion = 7;
+  static const databaseVersion = 8;
 
   static const tableClientes = 'clientes';
   static const tablePrestamos = 'prestamos';
@@ -73,6 +73,7 @@ class DbConstants {
       'mora_diaria_valor_recargo';
   static const configuracionMoraDiariaRecargoAcumulable =
       'mora_diaria_recargo_acumulable';
+  static const configuracionMoraDiariaHabilitada = 'mora_diaria_habilitada';
   static const configuracionMoraSemanalDiasGracia = 'mora_semanal_dias_gracia';
   static const configuracionMoraSemanalTipoRecargo =
       'mora_semanal_tipo_recargo';
@@ -80,6 +81,7 @@ class DbConstants {
       'mora_semanal_valor_recargo';
   static const configuracionMoraSemanalRecargoAcumulable =
       'mora_semanal_recargo_acumulable';
+  static const configuracionMoraSemanalHabilitada = 'mora_semanal_habilitada';
   static const configuracionMoraQuincenalDiasGracia =
       'mora_quincenal_dias_gracia';
   static const configuracionMoraQuincenalTipoRecargo =
@@ -88,6 +90,8 @@ class DbConstants {
       'mora_quincenal_valor_recargo';
   static const configuracionMoraQuincenalRecargoAcumulable =
       'mora_quincenal_recargo_acumulable';
+  static const configuracionMoraQuincenalHabilitada =
+      'mora_quincenal_habilitada';
   static const configuracionMoraMensualDiasGracia = 'mora_mensual_dias_gracia';
   static const configuracionMoraMensualTipoRecargo =
       'mora_mensual_tipo_recargo';
@@ -95,6 +99,7 @@ class DbConstants {
       'mora_mensual_valor_recargo';
   static const configuracionMoraMensualRecargoAcumulable =
       'mora_mensual_recargo_acumulable';
+  static const configuracionMoraMensualHabilitada = 'mora_mensual_habilitada';
   static const configuracionPinSeguridad = 'pin_seguridad';
   static const configuracionPinHash = 'pin_hash';
   static const configuracionPinIntentosFallidos = 'pin_intentos_fallidos';
