@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart'; // <--- AGREGA ESTA LÍNEA
 import 'core/constants/app_colors.dart';
 import 'core/constants/db_constants.dart';
 import 'core/constants/app_strings.dart';
@@ -17,6 +17,10 @@ void main() {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
+  await Supabase.initialize(
+    url: 'https://gcqoqgrdyqsqanwqpmjj.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjcW9xZ3JkeXFzcWFud3FwbWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwNTUzNjQsImV4cCI6MjEwODYzMTM2NH0.GIm_2lLprc7F0PaTzxJofmrfS8uwe8Xj7ZWPXFsboJY', // <--- Cambia anonKey por publishableKey
+  );
       // Captura errores del framework Flutter (build, layout, paint, etc.)
       FlutterError.onError = (FlutterErrorDetails details) {
         FlutterError.presentError(details);

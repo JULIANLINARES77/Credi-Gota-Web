@@ -335,10 +335,12 @@ class MainActivity : FlutterActivity() {
                 throw error
             }
             previous.delete()
-            selectedFile.delete()
+            // selectedFile.delete()
         } finally {
             replacement.delete()
             if (previous.exists() && databaseFile.exists()) previous.delete()
+            selectedFile.delete() // <--- LO PONEMOS AQUÍ (Se borrará siempre)
+
         }
     }
 

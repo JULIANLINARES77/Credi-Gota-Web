@@ -50,7 +50,7 @@ internal object LocalBackupContract {
     const val CHANNEL = "gotacontrol/local_backup"
     const val DATABASE_PATH = "database_path"
     const val TREE_URI = "tree_uri"
-    const val CURRENT_DATABASE_VERSION = 7
+    const val CURRENT_DATABASE_VERSION = 8
     const val BACKUP_FOLDER = "GotaControl"
     const val AUTOMATIC_PREFIX = "GotaControl_auto_"
     const val MANUAL_PREFIX = "GotaControl_manual_"
@@ -604,7 +604,7 @@ internal object LocalBackupContract {
             MediaStore.MediaColumns.DATE_MODIFIED,
             MediaStore.MediaColumns.RELATIVE_PATH,
         )
-        return listOf(DOCUMENTS_BACKUP_PATH, LEGACY_DOWNLOADS_BACKUP_PATH)
+        return listOf(DOCUMENTS_BACKUP_PATH)
             .flatMap { path ->
                 context.contentResolver.query(
                     collection,

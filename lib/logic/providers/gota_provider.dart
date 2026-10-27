@@ -110,37 +110,35 @@ class GotaProvider extends ChangeNotifier {
     if (mostrarCarga) _safeNotify();
 
     try {
+      // ─────────────────────────────────────────────────────────────
+      // OPTIMIZACIÓN: Traemos todo de golpe (Solo 4 consultas a SQLite)
+      // ─────────────────────────────────────────────────────────────
       final clientes = await _databaseHelper.obtenerTodosLosClientes();
-      final prestamosActivos = await _databaseHelper.obtenerPrestamosActivos();
+      final prestamos = await _databaseHelper.obtenerTodosLosPrestamos();
+      final todasLasCuotas = await _databaseHelper.obtenerTodasLasCuotas();
+      final todosLosPagos = await _databaseHelper.obtenerTodosLosPagos();
+
+      // 1. Crear mapa de préstamos por ID (Necesario para calcular ganancias)
       final prestamosPorId = <int, Prestamo>{
-        for (final prestamo in prestamosActivos)
+        for (final prestamo in prestamos)
           if (prestamo.id != null) prestamo.id!: prestamo,
       };
 
-      for (final cliente in clientes) {
-        if (cliente.id == null) continue;
-        final prestamosCliente = await _databaseHelper
-            .obtenerPrestamosPorCliente(cliente.id!);
-        for (final prestamo in prestamosCliente) {
-          if (prestamo.id != null) prestamosPorId[prestamo.id!] = prestamo;
-        }
-      }
-
-      final prestamos = prestamosPorId.values.toList()
-        ..sort((a, b) => b.fechaInicio.compareTo(a.fechaInicio));
+      // 2. Agrupar cuotas por préstamo en memoria (Evita consultas en bucle)
       final cuotasPorPrestamo = <int, List<Cuota>>{};
-      final pagosPorId = <int, Pago>{};
-
-      for (final prestamo in prestamos) {
-        final id = prestamo.id;
-        if (id == null) continue;
-        cuotasPorPrestamo[id] = await _databaseHelper.obtenerCuotasPorPrestamo(
-          id,
-        );
-        for (final pago in await _databaseHelper.obtenerPagosPorPrestamo(id)) {
-          if (pago.id != null) pagosPorId[pago.id!] = pago;
-        }
+      for (final cuota in todasLasCuotas) {
+        cuotasPorPrestamo.putIfAbsent(cuota.prestamoId, () => []).add(cuota);
       }
+
+      // 3. Agrupar pagos por ID
+      final pagosPorId = <int, Pago>{};
+      for (final pago in todosLosPagos) {
+        if (pago.id != null) pagosPorId[pago.id!] = pago;
+      }
+
+      // 4. Ordenar préstamos (igual que en tu código original)
+      prestamos.sort((a, b) => b.fechaInicio.compareTo(a.fechaInicio));
+      // ─────────────────────────────────────────────────────────────
 
       final pagosHoy = await _databaseHelper.obtenerPagosDelDia(_reloj());
       for (final pago in pagosHoy) {
@@ -161,6 +159,7 @@ class GotaProvider extends ChangeNotifier {
               interesTotal: prestamo.montoInteres,
             );
       });
+
       final configuracion = await _databaseHelper.obtenerConfiguracion();
       final clientesPorId = {
         for (final cliente in clientes)

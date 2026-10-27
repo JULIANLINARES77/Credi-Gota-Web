@@ -1,4 +1,3 @@
-import '../../core/constants/db_constants.dart';
 import '../../data/database/database_helper.dart';
 import '../../data/models/cliente.dart';
 import '../../data/models/cuota.dart';
@@ -87,78 +86,55 @@ class MoraService {
     return 'PENDIENTE';
   }
 
-  Future<double> aplicarMoraCuota({
+   Future<double> aplicarMoraCuota({
     required Prestamo prestamo,
     required Cuota cuota,
     DateTime? fechaReferencia,
   }) async {
     if (prestamo.id == null) {
-      throw ArgumentError(
-        'El préstamo debe estar guardado en la base de datos.',
-      );
+      throw ArgumentError('El préstamo debe estar guardado en la base de datos.');
     }
-    final db = await _databaseHelper.database;
-    return db.transaction((transaction) async {
-      final filasPrestamo = await transaction.query(
-        DbConstants.tablePrestamos,
-        where: 'id = ?',
-        whereArgs: [prestamo.id],
-        limit: 1,
-      );
-      if (filasPrestamo.isEmpty) {
-        throw StateError('No existe el préstamo ${prestamo.id}.');
-      }
-      final prestamoActual = Prestamo.fromMap(filasPrestamo.first);
-      if (prestamoActual.estado == 'PAGADO' ||
-          prestamoActual.estado == 'CANCELADO') {
-        return 0.0;
-      }
-      final filasCuota = await transaction.query(
-        DbConstants.tableCuotas,
-        where:
-            '${DbConstants.columnId} = ? AND '
-            '${DbConstants.cuotaPrestamoId} = ?',
-        whereArgs: [cuota.id, prestamo.id],
-        limit: 1,
-      );
-      if (filasCuota.isEmpty) {
-        throw StateError('La cuota no pertenece al préstamo indicado.');
-      }
-      final cuotaActual = Cuota.fromMap(filasCuota.first);
-      if (cuotaActual.estado == 'PAGADA' ||
-          cuotaActual.montoPagado >= cuotaActual.montoCuota) {
-        return 0.0;
-      }
-      final recargoObjetivo = calcularPenalizacionMora(
-        prestamo: prestamoActual,
-        cuota: cuotaActual,
-        fechaReferencia: fechaReferencia,
-      );
-      final montoAgregado = recargoObjetivo - cuotaActual.montoPenalizacion;
-      if (montoAgregado <= 0) return 0.0;
-      await transaction.update(
-        DbConstants.tableCuotas,
-        {
-          DbConstants.cuotaMonto: cuotaActual.montoCuota + montoAgregado,
-          DbConstants.cuotaMontoPenalizacion: recargoObjetivo,
-        },
-        where: '${DbConstants.columnId} = ?',
-        whereArgs: [cuotaActual.id],
-      );
-      await transaction.update(
-        DbConstants.tablePrestamos,
-        {
-          DbConstants.prestamoMontoTotalPagar:
-              prestamoActual.montoTotalPagar + montoAgregado,
-          DbConstants.prestamoSaldoPendiente:
-              prestamoActual.saldoPendiente + montoAgregado,
-          DbConstants.prestamoEstado: 'MORA',
-        },
-        where: '${DbConstants.columnId} = ?',
-        whereArgs: [prestamo.id],
-      );
-      return montoAgregado;
-    });
+
+    // 1. Obtener el estado actual desde Supabase para evitar conflictos
+    final prestamoActual = await _databaseHelper.obtenerPrestamoPorId(prestamo.id!);
+    if (prestamoActual == null) throw StateError('No existe el préstamo ${prestamo.id}.');
+
+    if (prestamoActual.estado == 'PAGADO' || prestamoActual.estado == 'CANCELADO') {
+      return 0.0;
+    }
+
+    final cuotas = await _databaseHelper.obtenerCuotasPorPrestamo(prestamo.id!);
+    final cuotaActual = cuotas.where((c) => c.id == cuota.id).firstOrNull;
+
+    if (cuotaActual == null) throw StateError('La cuota no pertenece al préstamo indicado.');
+    if (cuotaActual.estado == 'PAGADA' || cuotaActual.montoPagado >= cuotaActual.montoCuota) {
+      return 0.0;
+    }
+
+    // 2. Calcular el recargo
+    final recargoObjetivo = calcularPenalizacionMora(
+      prestamo: prestamoActual,
+      cuota: cuotaActual,
+      fechaReferencia: fechaReferencia,
+    );
+    
+    final montoAgregado = recargoObjetivo - cuotaActual.montoPenalizacion;
+    if (montoAgregado <= 0) return 0.0;
+
+    // 3. Actualizar la cuota en Supabase
+    await _databaseHelper.actualizarCuota(cuotaActual.copyWith(
+      montoCuota: cuotaActual.montoCuota + montoAgregado,
+      montoPenalizacion: recargoObjetivo,
+    ));
+
+    // 4. Actualizar el préstamo en Supabase
+    await _databaseHelper.actualizarPrestamo(prestamoActual.copyWith(
+      montoTotalPagar: prestamoActual.montoTotalPagar + montoAgregado,
+      saldoPendiente: prestamoActual.saldoPendiente + montoAgregado,
+      estado: 'MORA',
+    ));
+
+    return montoAgregado;
   }
 
   Future<List<PrestamoEnMora>> obtenerClientesEnMora() async {

@@ -557,7 +557,8 @@ class _NuevoPrestamoScreenState extends State<NuevoPrestamoScreen> {
       context: context,
       initialDate: _fechaInicio,
       firstDate: DateTime(2020),
-      lastDate: DateTime(hoy.year, hoy.month, hoy.day),
+      // Permitimos seleccionar hasta 2 años hacia adelante
+      lastDate: DateTime(hoy.year + 2, hoy.month, hoy.day), 
     );
     if (seleccion != null && mounted) {
       setState(
